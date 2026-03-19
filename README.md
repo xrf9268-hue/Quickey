@@ -11,6 +11,7 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - CGEvent tap baseline for global key capture
 - Accessibility permission check/request flow
 - Basic shortcut conflict detection
+- Recorder-style shortcut capture UI
 - Packaging scaffold for `.app`
 
 ## Project layout
@@ -49,8 +50,7 @@ The app needs Accessibility permission to observe global key events.
 - Enable the built app bundle
 
 ## Known gaps
-- No real shortcut recorder UI yet
-- Key parsing is still manual text entry
+- Recorder UI is basic and not yet a polished KeyboardShortcuts-style control
 - No SkyLight/private activation path yet
 - No signed/notarized release flow yet
 - Not compiled on this Linux host; final verification must happen on macOS

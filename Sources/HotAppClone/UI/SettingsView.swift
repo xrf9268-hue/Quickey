@@ -35,11 +35,29 @@ struct SettingsView: View {
                 Spacer()
             }
 
-            HStack {
+            VStack(alignment: .leading, spacing: 8) {
                 TextField("Bundle Identifier", text: $viewModel.selectedBundleIdentifier)
-                TextField("Key", text: $viewModel.keyEquivalent)
-                    .frame(width: 80)
-                TextField("Modifiers (comma separated)", text: $viewModel.modifierFlagsText)
+
+                HStack(spacing: 12) {
+                    ShortcutRecorderView(
+                        recordedShortcut: $viewModel.recordedShortcut,
+                        isRecording: $viewModel.isRecordingShortcut
+                    )
+                    .frame(width: 240, height: 28)
+
+                    if let recordedShortcut = viewModel.recordedShortcut {
+                        Text(recordedShortcut.displayText)
+                            .font(.system(.body, design: .monospaced))
+                    } else if viewModel.isRecordingShortcut {
+                        Text("Listening…")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Clear") {
+                        viewModel.clearRecordedShortcut()
+                    }
+                    .disabled(viewModel.recordedShortcut == nil && !viewModel.isRecordingShortcut)
+                }
             }
 
             if let conflictMessage = viewModel.conflictMessage {
@@ -51,7 +69,7 @@ struct SettingsView: View {
             Button("Add Shortcut") {
                 viewModel.addShortcut()
             }
-            .disabled(viewModel.selectedBundleIdentifier.isEmpty || viewModel.keyEquivalent.isEmpty)
+            .disabled(viewModel.selectedBundleIdentifier.isEmpty || viewModel.recordedShortcut == nil)
 
             List {
                 ForEach(viewModel.shortcuts) { shortcut in

@@ -6,8 +6,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var shortcuts: [AppShortcut] = []
     @Published var selectedAppName: String = ""
     @Published var selectedBundleIdentifier: String = ""
-    @Published var keyEquivalent: String = ""
-    @Published var modifierFlagsText: String = "command,option"
+    @Published var recordedShortcut: RecordedShortcut?
+    @Published var isRecordingShortcut: Bool = false
     @Published var accessibilityGranted: Bool = false
     @Published var conflictMessage: String?
 
@@ -24,24 +24,17 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func addShortcut() {
-        let modifiers = modifierFlagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        let normalizedKey = shortcutValidator.normalizedKey(keyEquivalent)
-
         guard !selectedAppName.isEmpty,
               !selectedBundleIdentifier.isEmpty,
-              !normalizedKey.isEmpty else {
+              let recordedShortcut else {
             return
         }
 
         let candidate = AppShortcut(
             appName: selectedAppName,
             bundleIdentifier: selectedBundleIdentifier,
-            keyEquivalent: normalizedKey,
-            modifierFlags: modifiers
+            keyEquivalent: recordedShortcut.keyEquivalent,
+            modifierFlags: recordedShortcut.modifierFlags
         )
 
         if let conflict = shortcutValidator.conflict(for: candidate, in: shortcuts) {
@@ -92,10 +85,15 @@ final class SettingsViewModel: ObservableObject {
         accessibilityGranted = shortcutManager.hasAccessibilityAccess()
     }
 
+    func clearRecordedShortcut() {
+        recordedShortcut = nil
+        isRecordingShortcut = false
+    }
+
     private func resetDraft() {
         selectedAppName = ""
         selectedBundleIdentifier = ""
-        keyEquivalent = ""
-        modifierFlagsText = "command,option"
+        recordedShortcut = nil
+        isRecordingShortcut = false
     }
 }
