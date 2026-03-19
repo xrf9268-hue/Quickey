@@ -15,11 +15,20 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - Thor-like toggle semantics baseline
 - Packaging scaffold for `.app`
 
+## Quick navigation
+- Docs index: [`docs/README.md`](./docs/README.md)
+- Architecture: [`docs/architecture.md`](./docs/architecture.md)
+- Roadmap: [`docs/roadmap.md`](./docs/roadmap.md)
+- macOS validation: [`docs/macos-validation-checklist.md`](./docs/macos-validation-checklist.md)
+- Handoff notes: [`docs/handoff-notes.md`](./docs/handoff-notes.md)
+- TODO list: [`TODO.md`](./TODO.md)
+
 ## Project layout
 - `Package.swift`
 - `Sources/HotAppClone/`
 - `Sources/HotAppClone/Resources/Info.plist`
 - `Tests/HotAppCloneTests/`
+- `docs/README.md`
 - `docs/architecture.md`
 - `docs/roadmap.md`
 - `docs/clone-scope.md`
