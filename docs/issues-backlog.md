@@ -2,6 +2,32 @@
 
 This backlog turns the current roadmap into concrete execution tickets.
 
+## Existing repo issues
+See the GitHub issue tracker for the current execution queue.
+
+## Architecture remediation expansion
+These items complement the current repo issues and focus specifically on architectural hardening.
+
+### A. Align permissions with the actual CGEvent tap model
+- move from Accessibility-style trust assumptions to the most appropriate listen-event access model
+- verify the final permission UX on real macOS builds
+
+### B. Replace linear shortcut scans with a precompiled O(1) lookup index
+- introduce a shortcut signature type
+- rebuild the trigger index when bindings change
+- keep the keydown hot path minimal
+
+### C. Tighten event tap lifecycle ownership and cleanup
+- make callback context ownership explicit
+- ensure teardown is auditable and leak-resistant
+
+### D. Reduce unnecessary MainActor pressure in runtime services
+- keep UI code on the main actor
+- shrink main-thread ownership for matching and runtime-only logic
+
+### E. Improve testability boundaries
+- make key matching and toggle logic easier to test without the full event environment
+
 ## 1. Compile and validate HotApp Clone on macOS
 **Goal**
 Prove the project builds and runs on a real macOS machine.
