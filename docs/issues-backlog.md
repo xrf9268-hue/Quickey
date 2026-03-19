@@ -1,109 +1,31 @@
 # Issues Backlog
 
-This backlog turns the current roadmap into concrete execution tickets.
+This file is a lightweight companion to the GitHub issue tracker.
 
-## Existing repo issues
-See the GitHub issue tracker for the current execution queue.
+## Use these as the primary execution sources
+1. GitHub issues
+2. `docs/issue-priority-plan.md`
+3. `TODO.md`
 
-Priority grouping is documented in `docs/issue-priority-plan.md`.
-Codex review findings are summarized in `docs/codex-review-summary.md`.
+## Why this file still exists
+It records the main backlog themes at a glance, without repeating the full issue tracker.
 
-## Architecture remediation expansion
-These items complement the current repo issues and focus specifically on architectural hardening.
+## Main backlog themes
+- macOS validation
+- runtime reliability and architecture correctness
+- trigger-path performance improvements
+- tests and repeatable validation
+- interaction quality and behavior polish
+- packaging, launch-at-login, and release hardening
+- product naming and identity only after the runtime core is stable
 
-### A. Align permissions with the actual CGEvent tap model
-- move from Accessibility-style trust assumptions to the most appropriate listen-event access model
-- verify the final permission UX on real macOS builds
+## Architecture-specific themes already tracked
+- align permission handling with the real CGEvent tap monitoring model
+- tighten event tap lifecycle ownership and disabled/timeout recovery
+- recover monitoring after permission changes without relaunch
+- replace linear scans with a precompiled trigger index
+- reduce unnecessary MainActor pressure in runtime services
+- clarify runtime state ownership boundaries
 
-### B. Replace linear shortcut scans with a precompiled O(1) lookup index
-- introduce a shortcut signature type
-- rebuild the trigger index when bindings change
-- keep the keydown hot path minimal
-
-### C. Tighten event tap lifecycle ownership and cleanup
-- make callback context ownership explicit
-- ensure teardown is auditable and leak-resistant
-
-### D. Recover event monitoring from disabled/timeout states
-- treat silent event-tap stoppage as a first-class reliability problem
-- define a concrete recovery path
-
-### E. Recover monitoring after permission changes without relaunch
-- keep permission UI state and runtime state in sync
-- re-establish monitoring when permission is granted after startup
-
-### F. Reduce unnecessary MainActor pressure in runtime services
-- keep UI code on the main actor
-- shrink main-thread ownership for matching and runtime-only logic
-
-### G. Improve testability boundaries
-- make key matching and toggle logic easier to test without the full event environment
-
-## 1. Compile and validate HotApp Clone on macOS
-**Goal**
-Prove the project builds and runs on a real macOS machine.
-
-**Done when**
-- `swift build` works on macOS
-- `swift test` works on macOS
-- the `.app` launches as an LSUIElement menu bar app
-- one shortcut works end to end
-
-## 2. Fix compile/runtime issues discovered during first macOS build
-**Goal**
-Resolve the first round of real compile or runtime failures found during validation.
-
-**Done when**
-- the initial macOS validation blockers are fixed
-- the validation checklist can progress past first-run errors
-
-## 3. Polish shortcut recorder UX and unsupported-key handling
-**Goal**
-Make shortcut capture feel reliable and understandable.
-
-**Done when**
-- unsupported keys are explained cleanly
-- recorder state is visually clearer
-- special key display is more polished
-
-## 4. Improve toggle semantics for minimized/full-screen/multi-window apps
-**Goal**
-Make app switching behavior more consistent across real-world app states.
-
-**Done when**
-- toggle behavior handles common edge cases better
-- previous-app restoration is more dependable
-
-## 5. Add stronger Hyper-style shortcut support and validation
-**Goal**
-Improve capture and matching for heavy modifier combinations.
-
-**Done when**
-- at least one Hyper-style shortcut is validated successfully
-- known modifier edge cases are documented or fixed
-
-## 6. Automate `.app` packaging end to end
-**Goal**
-Reduce manual packaging steps.
-
-**Done when**
-- one command produces a runnable app bundle from a successful build
-- bundle metadata is applied consistently
-
-## 7. Add tests for key mapping, conflicts, and toggle logic
-**Goal**
-Increase confidence in the project’s core logic.
-
-**Done when**
-- key mapping coverage exists
-- conflict detection coverage exists
-- toggle logic has focused tests
-
-## 8. Document signing/notarization and release workflow
-**Goal**
-Define the path from local app bundle to distributable build.
-
-**Done when**
-- signing expectations are documented
-- notarization steps are documented
-- release packaging notes are coherent
+## Rule of thumb
+If a task is already represented clearly in GitHub issues or `docs/issue-priority-plan.md`, do not duplicate its full details here.

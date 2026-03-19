@@ -1,28 +1,28 @@
 # Handoff Notes
 
-## What is already implemented
+## Current state
+HotApp Clone is a strong prototype scaffold, not yet a validated macOS product.
+
+Already in place:
 - SPM-only Swift project structure
-- Menu bar app baseline
-- Settings window with app selection
-- Recorder-style shortcut capture UI
-- Persistent shortcut storage
-- Event tap baseline
-- Accessibility permission flow
-- Shortcut conflict detection
-- Best-effort Thor-like toggle behavior
-- Packaging scaffold and validation docs
+- menu bar app baseline
+- settings window and recorder-style shortcut capture
+- persistence, event tap baseline, and initial toggle behavior
+- packaging scaffold and planning docs
+- issue tracker with prioritized execution order
 
-## What has NOT been validated yet
-- Compilation on a real macOS Swift toolchain
-- End-to-end global shortcut capture in a running app bundle
-- Previous-app restore edge cases
-- Hyper-style modifier combinations in practice
-- App bundle signing/notarization
+## Most important unresolved facts
+- The app has **not** been compiled and validated on a real macOS Swift toolchain yet.
+- Global shortcut capture, permission behavior, and toggle behavior still require real macOS verification.
+- Runtime reliability work remains higher priority than adding more speculative features.
 
-## Important context
-- This project was scaffolded from Linux, so structure and code paths were designed for macOS but not compiled in place here.
-- The recovered HotApp article was only partially available, so some behavior is inferred from Thor and the visible excerpt.
-- The safest current activation path uses public APIs; private SkyLight acceleration is intentionally deferred.
+## Immediate next action
+Use a macOS machine to run `docs/macos-validation-checklist.md`.
 
-## Recommended immediate next action
-Use a macOS machine to run the checklist in `docs/macos-validation-checklist.md` and fix compile/runtime gaps before adding more features.
+## If continuing implementation before full product polish
+Prefer work in this order:
+1. macOS validation
+2. runtime reliability and architecture correctness
+3. focused tests and repeatable validation
+4. interaction quality and behavior improvements
+5. packaging / release polish later
