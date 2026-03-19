@@ -8,14 +8,17 @@ final class SettingsViewModel: ObservableObject {
     @Published var selectedBundleIdentifier: String = ""
     @Published var keyEquivalent: String = ""
     @Published var modifierFlagsText: String = "command,option"
+    @Published var accessibilityGranted: Bool = false
 
     private let shortcutStore: ShortcutStore
     private let shortcutManager: ShortcutManager
+    private let appBundleLocator = AppBundleLocator()
 
     init(shortcutStore: ShortcutStore, shortcutManager: ShortcutManager) {
         self.shortcutStore = shortcutStore
         self.shortcutManager = shortcutManager
         self.shortcuts = shortcutStore.shortcuts
+        self.accessibilityGranted = shortcutManager.hasAccessibilityAccess()
     }
 
     func addShortcut() {
@@ -66,6 +69,17 @@ final class SettingsViewModel: ObservableObject {
 
         selectedAppName = url.deletingPathExtension().lastPathComponent
         selectedBundleIdentifier = bundleIdentifier
+    }
+
+    func revealApplication() {
+        guard let url = appBundleLocator.applicationURL(for: selectedBundleIdentifier) else {
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func refreshPermissions() {
+        accessibilityGranted = shortcutManager.hasAccessibilityAccess()
     }
 
     private func resetDraft() {

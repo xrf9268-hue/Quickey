@@ -10,8 +10,25 @@ struct SettingsView: View {
                 .bold()
 
             HStack(spacing: 12) {
+                Circle()
+                    .fill(viewModel.accessibilityGranted ? Color.green : Color.orange)
+                    .frame(width: 10, height: 10)
+                Text(viewModel.accessibilityGranted ? "Accessibility granted" : "Accessibility required for global shortcuts")
+                    .foregroundStyle(.secondary)
+                Button("Refresh") {
+                    viewModel.refreshPermissions()
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 12) {
                 Button("Choose App") {
                     viewModel.chooseApplication()
+                }
+                if !viewModel.selectedBundleIdentifier.isEmpty {
+                    Button("Reveal App") {
+                        viewModel.revealApplication()
+                    }
                 }
                 Text(viewModel.selectedAppName.isEmpty ? "No app selected" : viewModel.selectedAppName)
                     .foregroundStyle(.secondary)
