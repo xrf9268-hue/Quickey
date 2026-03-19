@@ -20,6 +20,8 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - `Sources/HotAppClone/`
 - `Sources/HotAppClone/Resources/Info.plist`
 - `Tests/HotAppCloneTests/`
+- `docs/architecture.md`
+- `docs/roadmap.md`
 - `docs/clone-scope.md`
 - `docs/packaging-and-permissions.md`
 - `docs/toggle-semantics.md`
