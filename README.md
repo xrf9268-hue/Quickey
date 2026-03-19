@@ -20,6 +20,7 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - Architecture: [`docs/architecture.md`](./docs/architecture.md)
 - Architecture remediation: [`docs/architecture-remediation-plan.md`](./docs/architecture-remediation-plan.md)
 - Roadmap: [`docs/roadmap.md`](./docs/roadmap.md)
+- Issue priority plan: [`docs/issue-priority-plan.md`](./docs/issue-priority-plan.md)
 - macOS validation: [`docs/macos-validation-checklist.md`](./docs/macos-validation-checklist.md)
 - Handoff notes: [`docs/handoff-notes.md`](./docs/handoff-notes.md)
 - Issues backlog: [`docs/issues-backlog.md`](./docs/issues-backlog.md)
@@ -34,6 +35,7 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - `docs/architecture.md`
 - `docs/architecture-remediation-plan.md`
 - `docs/roadmap.md`
+- `docs/issue-priority-plan.md`
 - `docs/clone-scope.md`
 - `docs/packaging-and-permissions.md`
 - `docs/toggle-semantics.md`

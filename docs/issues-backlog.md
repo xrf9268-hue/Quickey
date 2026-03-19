@@ -5,6 +5,8 @@ This backlog turns the current roadmap into concrete execution tickets.
 ## Existing repo issues
 See the GitHub issue tracker for the current execution queue.
 
+Priority grouping is documented in `docs/issue-priority-plan.md`.
+
 ## Architecture remediation expansion
 These items complement the current repo issues and focus specifically on architectural hardening.
 
