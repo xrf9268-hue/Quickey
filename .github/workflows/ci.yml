@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Package app bundle
+        run: bash scripts/package-app.sh
+
+      - name: Verify app bundle
+        run: |
+          test -f build/HotAppClone.app/Contents/MacOS/HotAppClone
+          test -f build/HotAppClone.app/Contents/Info.plist
+          file build/HotAppClone.app/Contents/MacOS/HotAppClone | grep -q "Mach-O"
