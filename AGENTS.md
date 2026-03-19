@@ -73,6 +73,35 @@ If working from a non-macOS host without Swift installed:
 - do not pretend the project was built successfully
 - state clearly that build/runtime validation is still pending on macOS
 
+## Swift and macOS guidance
+
+### API design
+- Prefer Swift-style APIs with clarity at the point of use.
+- Clarity is more important than brevity.
+- Avoid vague names like `Helper`, `Utils`, or unnecessary `Manager` naming when a more specific type name is available.
+- Name parameters by their role, not just their type.
+- If an API is difficult to explain simply, reconsider the API shape before adding more code around it.
+
+### Concurrency and actor boundaries
+- Do not use `@MainActor` as the default answer for non-UI code.
+- Keep UI, window, and SwiftUI-facing state on the main actor.
+- Runtime-only logic such as matching, indexing, and event-processing should justify any main-actor coupling.
+- When adding new shared state, think explicitly about ownership, thread safety, and whether the type should be `Sendable`.
+
+### App-shell direction for macOS 14+
+- For new app-shell work, prefer evaluating current Apple scene-based APIs first.
+- This includes `MenuBarExtra`, `Settings`, `openSettings`, and `SMAppService` where appropriate.
+- If retaining an AppKit-first approach, make it a deliberate documented choice rather than an accidental default.
+
+### Documentation comments
+- For important runtime or architectural APIs, add concise Swift doc comments when they materially improve readability.
+- Especially document permission flow, event-tap lifecycle, trigger indexing, and toggle behavior when those areas change.
+
+### State modeling
+- Prefer value types for domain models when practical.
+- Shared mutable runtime state should have a clear owner.
+- Avoid letting multiple services mutate the same implicit state without an explicit boundary.
+
 ## Architecture expectations
 
 The current code is a scaffold, not a final architecture.
