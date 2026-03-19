@@ -1,6 +1,6 @@
 # Docs Index
 
-This directory contains the design, validation, architecture, and continuation notes for HotApp Clone.
+This directory contains the design, validation, architecture, and continuation notes for Quickey.
 
 ## Start here
 - [`../AGENTS.md`](../AGENTS.md) — agent-facing project guidance, priorities, constraints, and editing rules

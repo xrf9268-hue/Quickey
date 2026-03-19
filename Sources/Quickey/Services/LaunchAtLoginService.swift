@@ -1,7 +1,7 @@
 import ServiceManagement
 import os.log
 
-private let logger = Logger(subsystem: "com.hotappclone", category: "LaunchAtLogin")
+private let logger = Logger(subsystem: "com.quickey.app", category: "LaunchAtLogin")
 
 struct LaunchAtLoginService {
     private let service = SMAppService.mainApp

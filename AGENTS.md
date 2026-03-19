@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent guidance for working on **HotApp Clone**.
+Agent guidance for working on **Quickey**.
 
 This file is for coding agents and automation tools. Use it together with:
 - `README.md`
@@ -11,7 +11,7 @@ This file is for coding agents and automation tools. Use it together with:
 
 ## Project overview
 
-HotApp Clone is a macOS menu bar utility inspired by Thor and the recovered HotApp article.
+Quickey is a macOS menu bar utility inspired by Thor and the recovered HotApp article.
 It binds global shortcuts to target apps, activates them quickly, and toggles them away when pressed again.
 
 Current state:
@@ -66,7 +66,7 @@ swift build
 swift test
 swift build -c release
 ./scripts/package-app.sh
-cp .build/release/HotAppClone build/HotAppClone.app/Contents/MacOS/HotAppClone
+cp .build/release/Quickey build/Quickey.app/Contents/MacOS/Quickey
 ```
 
 If working from a non-macOS host without Swift installed:

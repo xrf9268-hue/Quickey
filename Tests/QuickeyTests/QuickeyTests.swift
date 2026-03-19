@@ -1,7 +1,7 @@
 import Testing
 import AppKit
 import Carbon.HIToolbox
-@testable import HotAppClone
+@testable import Quickey
 
 // MARK: - AppShortcut
 

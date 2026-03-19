@@ -3,7 +3,7 @@
 This summary captures a Codex review of the repository focused on architecture, Apple/macOS alignment, performance, and issue coverage.
 
 ## Overall assessment
-HotApp Clone is a solid prototype scaffold, but it is not yet a production-grade macOS menu bar utility.
+Quickey is a solid prototype scaffold, but it is not yet a production-grade macOS menu bar utility.
 The codebase is small, readable, and reasonably decomposed, but runtime robustness, platform alignment, and real macOS validation are still missing.
 
 ## Main conclusions

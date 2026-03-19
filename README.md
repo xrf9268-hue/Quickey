@@ -1,4 +1,4 @@
-# HotApp Clone
+# Quickey
 
 A macOS menu bar utility inspired by Thor and the recovered HotApp article. It binds global shortcuts to target apps, activates them quickly, and toggles them away when pressed again.
 
@@ -27,9 +27,9 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 ## Project layout
 - `AGENTS.md`
 - `Package.swift`
-- `Sources/HotAppClone/`
-- `Sources/HotAppClone/Resources/Info.plist`
-- `Tests/HotAppCloneTests/`
+- `Sources/Quickey/`
+- `Sources/Quickey/Resources/Info.plist`
+- `Tests/QuickeyTests/`
 - `docs/README.md`
 - `docs/architecture.md`
 - `docs/architecture-remediation-plan.md`
@@ -58,7 +58,7 @@ swift test
 ```bash
 swift build -c release
 ./scripts/package-app.sh
-cp .build/release/HotAppClone build/HotAppClone.app/Contents/MacOS/HotAppClone
+cp .build/release/Quickey build/Quickey.app/Contents/MacOS/Quickey
 ```
 
 ### Accessibility

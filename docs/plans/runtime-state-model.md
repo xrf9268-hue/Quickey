@@ -38,7 +38,7 @@ AppController (owner: creates all components)
 ### 1. Persistent state (disk)
 | Data | Location | Owner |
 |------|----------|-------|
-| `[AppShortcut]` | `~/Library/Application Support/HotAppClone/shortcuts.json` | PersistenceService |
+| `[AppShortcut]` | `~/Library/Application Support/Quickey/shortcuts.json` | PersistenceService |
 
 **Read**: once at launch (`AppController.start()`)
 **Write**: on every save (`ShortcutManager.save()`)

@@ -1,6 +1,6 @@
 # Architecture Remediation Plan
 
-This document captures the next architectural improvements needed to move HotApp Clone from a good scaffold to a stronger macOS-native design.
+This document captures the next architectural improvements needed to move Quickey from a good scaffold to a stronger macOS-native design.
 
 ## P0 — correctness, lifecycle, and hot-path fixes
 

@@ -1,7 +1,7 @@
 # Toggle Semantics
 
 ## Intended behavior
-HotApp Clone should behave like a dedicated app switcher, not just a one-way launcher.
+Quickey should behave like a dedicated app switcher, not just a one-way launcher.
 
 For a given shortcut bound to a target app:
 1. If the target app is not frontmost, activate it.

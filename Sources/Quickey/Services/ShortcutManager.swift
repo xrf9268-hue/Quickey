@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: "com.hotappclone", category: "ShortcutManager")
+private let logger = Logger(subsystem: "com.quickey.app", category: "ShortcutManager")
 
 @MainActor
 final class ShortcutManager {

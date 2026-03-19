@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 import os.log
 
-private let logger = Logger(subsystem: "com.hotappclone", category: "UsageTracker")
+private let logger = Logger(subsystem: "com.quickey.app", category: "UsageTracker")
 
 actor UsageTracker {
     private nonisolated(unsafe) let db: OpaquePointer?
@@ -120,7 +120,7 @@ actor UsageTracker {
             return ":memory:"
         }
 
-        let directory = appSupport.appendingPathComponent("HotAppClone", isDirectory: true)
+        let directory = appSupport.appendingPathComponent("Quickey", isDirectory: true)
         if !fm.fileExists(atPath: directory.path) {
             try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         }

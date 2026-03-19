@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="HotAppClone"
-BUNDLE_ID="com.xrf9268.hotapp-clone"
+APP_NAME="Quickey"
+BUNDLE_ID="com.quickey.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
@@ -10,7 +10,7 @@ APP_DIR="$BUILD_DIR/${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-INFO_PLIST="$PROJECT_DIR/Sources/HotAppClone/Resources/Info.plist"
+INFO_PLIST="$PROJECT_DIR/Sources/Quickey/Resources/Info.plist"
 
 echo "==> Building release binary..."
 swift build -c release --package-path "$PROJECT_DIR"
@@ -32,7 +32,7 @@ chmod +x "$MACOS_DIR/${APP_NAME}"
 # Copy Info.plist from canonical source
 if [ -f "$INFO_PLIST" ]; then
     cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
-    echo "    Info.plist copied from Sources/HotAppClone/Resources/Info.plist"
+    echo "    Info.plist copied from Sources/Quickey/Resources/Info.plist"
 else
     echo "Warning: Info.plist not found at $INFO_PLIST, generating default" >&2
     cat > "$CONTENTS_DIR/Info.plist" <<PLIST
