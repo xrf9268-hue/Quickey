@@ -19,6 +19,7 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - Docs index: [`docs/README.md`](./docs/README.md)
 - Architecture: [`docs/architecture.md`](./docs/architecture.md)
 - Architecture remediation: [`docs/architecture-remediation-plan.md`](./docs/architecture-remediation-plan.md)
+- Codex review summary: [`docs/codex-review-summary.md`](./docs/codex-review-summary.md)
 - Roadmap: [`docs/roadmap.md`](./docs/roadmap.md)
 - Issue priority plan: [`docs/issue-priority-plan.md`](./docs/issue-priority-plan.md)
 - macOS validation: [`docs/macos-validation-checklist.md`](./docs/macos-validation-checklist.md)
@@ -34,6 +35,7 @@ A macOS menu bar utility inspired by Thor and the recovered HotApp article. It b
 - `docs/README.md`
 - `docs/architecture.md`
 - `docs/architecture-remediation-plan.md`
+- `docs/codex-review-summary.md`
 - `docs/roadmap.md`
 - `docs/issue-priority-plan.md`
 - `docs/clone-scope.md`

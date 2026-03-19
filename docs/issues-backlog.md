@@ -6,6 +6,7 @@ This backlog turns the current roadmap into concrete execution tickets.
 See the GitHub issue tracker for the current execution queue.
 
 Priority grouping is documented in `docs/issue-priority-plan.md`.
+Codex review findings are summarized in `docs/codex-review-summary.md`.
 
 ## Architecture remediation expansion
 These items complement the current repo issues and focus specifically on architectural hardening.
@@ -23,11 +24,19 @@ These items complement the current repo issues and focus specifically on archite
 - make callback context ownership explicit
 - ensure teardown is auditable and leak-resistant
 
-### D. Reduce unnecessary MainActor pressure in runtime services
+### D. Recover event monitoring from disabled/timeout states
+- treat silent event-tap stoppage as a first-class reliability problem
+- define a concrete recovery path
+
+### E. Recover monitoring after permission changes without relaunch
+- keep permission UI state and runtime state in sync
+- re-establish monitoring when permission is granted after startup
+
+### F. Reduce unnecessary MainActor pressure in runtime services
 - keep UI code on the main actor
 - shrink main-thread ownership for matching and runtime-only logic
 
-### E. Improve testability boundaries
+### G. Improve testability boundaries
 - make key matching and toggle logic easier to test without the full event environment
 
 ## 1. Compile and validate HotApp Clone on macOS
