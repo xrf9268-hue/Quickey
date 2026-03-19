@@ -26,8 +26,10 @@ Recommended baseline:
 - stable `CFBundleIdentifier`
 - standard display name and version keys
 
-## Future hardening
-- login item support
-- notarization/signing workflow
-- release packaging script
-- permission diagnostics in settings UI
+## Completed hardening
+- Login item support via `SMAppService.mainApp` (see `LaunchAtLoginService`)
+- Permission diagnostics in Settings UI (Shortcuts tab shows accessibility status)
+- Release packaging script (`scripts/package-app.sh`)
+
+## Signing and release
+See [signing-and-release.md](signing-and-release.md) for the full signing, notarization, and distribution workflow.
