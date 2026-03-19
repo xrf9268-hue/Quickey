@@ -7,7 +7,7 @@
 
 ## App bundle validation
 - [ ] Run `./scripts/package-app.sh`
-- [ ] Copy release binary into `build/HotAppClone.app/Contents/MacOS/HotAppClone`
+- [ ] Copy release binary into `build/Quickey.app/Contents/MacOS/Quickey`
 - [ ] Confirm `Info.plist` contains `LSUIElement=1`
 - [ ] Launch the app bundle successfully
 - [ ] Confirm no Dock icon appears

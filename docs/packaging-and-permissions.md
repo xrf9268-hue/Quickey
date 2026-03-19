@@ -1,7 +1,7 @@
 # Packaging and Permissions
 
 ## Accessibility
-HotApp Clone uses a CGEvent tap for global shortcut capture. On macOS this requires Accessibility permission.
+Quickey uses a CGEvent tap for global shortcut capture. On macOS this requires Accessibility permission.
 
 Expected flow:
 1. Launch the app

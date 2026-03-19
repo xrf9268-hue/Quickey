@@ -5,7 +5,7 @@ This plan groups the existing GitHub issues into a practical execution order.
 ## Tier 0 — prove the project is real on macOS
 These issues should go first because they convert the current scaffold into a validated macOS app.
 
-1. **#1 Compile and validate HotApp Clone on macOS**
+1. **#1 Compile and validate Quickey on macOS**
 2. **#2 Fix compile/runtime issues discovered during first macOS build**
 
 Why first:
@@ -58,7 +58,7 @@ These improve daily use and product quality once core functionality is sound.
 These issues remain important but should follow a stronger product baseline.
 
 18. **#8 Document signing/notarization and release workflow**
-19. **#9 Rename project from HotAppClone to a stronger product name**
+19. **#9 Rename project from HotAppClone to Quickey**
 
 Why here:
 These matter, but renaming or release-hardening too early increases churn before the architecture and runtime are stable.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-HotApp Clone is an SPM-based macOS menu-bar app. Distribution requires:
+Quickey is an SPM-based macOS menu-bar app. Distribution requires:
 1. Building a release binary
 2. Packaging into an `.app` bundle
 3. Code signing
@@ -22,7 +22,7 @@ HotApp Clone is an SPM-based macOS menu-bar app. Distribution requires:
 swift build -c release
 ```
 
-The binary is produced at `.build/release/HotAppClone`.
+The binary is produced at `.build/release/Quickey`.
 
 ## 2. Package App Bundle
 
@@ -32,9 +32,9 @@ Use the included packaging script:
 ./scripts/package-app.sh
 ```
 
-This creates `build/HotAppClone.app` with:
-- `Contents/MacOS/HotAppClone` (release binary)
-- `Contents/Info.plist` (from `Sources/HotAppClone/Resources/Info.plist`)
+This creates `build/Quickey.app` with:
+- `Contents/MacOS/Quickey` (release binary)
+- `Contents/Info.plist` (from `Sources/Quickey/Resources/Info.plist`)
 - `Contents/Resources/` (empty, ready for icons)
 
 ## 3. Code Signing
@@ -46,7 +46,7 @@ codesign --deep --force --verify --verbose \
   --sign "Developer ID Application: Your Name (TEAM_ID)" \
   --options runtime \
   --entitlements entitlements.plist \
-  build/HotAppClone.app
+  build/Quickey.app
 ```
 
 ### Entitlements
@@ -70,8 +70,8 @@ Create `entitlements.plist` at the project root:
 ### Verify Signing
 
 ```bash
-codesign --verify --deep --strict --verbose=2 build/HotAppClone.app
-spctl --assess --type exec --verbose build/HotAppClone.app
+codesign --verify --deep --strict --verbose=2 build/Quickey.app
+spctl --assess --type exec --verbose build/Quickey.app
 ```
 
 ## 4. Notarization
@@ -79,7 +79,7 @@ spctl --assess --type exec --verbose build/HotAppClone.app
 ### Create a ZIP for Upload
 
 ```bash
-ditto -c -k --keepParent build/HotAppClone.app build/HotAppClone.zip
+ditto -c -k --keepParent build/Quickey.app build/Quickey.zip
 ```
 
 ### Submit for Notarization
@@ -87,7 +87,7 @@ ditto -c -k --keepParent build/HotAppClone.app build/HotAppClone.zip
 Using an App Store Connect API key (recommended):
 
 ```bash
-xcrun notarytool submit build/HotAppClone.zip \
+xcrun notarytool submit build/Quickey.zip \
   --key ~/.private_keys/AuthKey_KEYID.p8 \
   --key-id KEYID \
   --issuer ISSUER_UUID \
@@ -97,7 +97,7 @@ xcrun notarytool submit build/HotAppClone.zip \
 Or using an app-specific password:
 
 ```bash
-xcrun notarytool submit build/HotAppClone.zip \
+xcrun notarytool submit build/Quickey.zip \
   --apple-id "your@email.com" \
   --team-id TEAM_ID \
   --password "@keychain:notarytool-password" \
@@ -109,27 +109,27 @@ xcrun notarytool submit build/HotAppClone.zip \
 After notarization succeeds:
 
 ```bash
-xcrun stapler staple build/HotAppClone.app
+xcrun stapler staple build/Quickey.app
 ```
 
 ### Verify Notarization
 
 ```bash
-xcrun stapler validate build/HotAppClone.app
-spctl --assess --type exec --verbose build/HotAppClone.app
+xcrun stapler validate build/Quickey.app
+spctl --assess --type exec --verbose build/Quickey.app
 ```
 
 ## 5. Create Distributable Archive
 
 ```bash
-ditto -c -k --keepParent build/HotAppClone.app build/HotAppClone.zip
+ditto -c -k --keepParent build/Quickey.app build/Quickey.zip
 ```
 
 This ZIP can be distributed via GitHub Releases or direct download.
 
 ## Release Checklist
 
-1. Update `CFBundleShortVersionString` and `CFBundleVersion` in `Sources/HotAppClone/Resources/Info.plist`
+1. Update `CFBundleShortVersionString` and `CFBundleVersion` in `Sources/Quickey/Resources/Info.plist`
 2. Ensure all tests pass: `swift test`
 3. Run `./scripts/package-app.sh`
 4. Code sign with `--options runtime`

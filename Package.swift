@@ -2,23 +2,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "HotAppClone",
+    name: "Quickey",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "HotAppClone", targets: ["HotAppClone"])
+        .executable(name: "Quickey", targets: ["Quickey"])
     ],
     targets: [
         .executableTarget(
-            name: "HotAppClone",
-            path: "Sources/HotAppClone",
+            name: "Quickey",
+            path: "Sources/Quickey",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .testTarget(
-            name: "HotAppCloneTests",
-            dependencies: ["HotAppClone"],
-            path: "Tests/HotAppCloneTests"
+            name: "QuickeyTests",
+            dependencies: ["Quickey"],
+            path: "Tests/QuickeyTests"
         )
     ]
 )

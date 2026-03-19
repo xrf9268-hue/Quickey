@@ -1,7 +1,7 @@
 # Architecture
 
 ## High-level overview
-HotApp Clone is a menu bar macOS utility that stores app-shortcut bindings, captures global key events, matches them to stored shortcuts, and toggles target apps.
+Quickey is a menu bar macOS utility that stores app-shortcut bindings, captures global key events, matches them to stored shortcuts, and toggles target apps.
 
 ```text
 +--------------------+
@@ -120,7 +120,7 @@ Responsibilities:
 ### Permissions and packaging
 - `AccessibilityPermissionService`
 - `scripts/package-app.sh`
-- `Sources/HotAppClone/Resources/Info.plist`
+- `Sources/Quickey/Resources/Info.plist`
 
 Responsibilities:
 - request/check Accessibility trust

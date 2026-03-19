@@ -31,7 +31,7 @@ struct PersistenceService: Sendable {
             return nil
         }
 
-        let directory = appSupport.appendingPathComponent("HotAppClone", isDirectory: true)
+        let directory = appSupport.appendingPathComponent("Quickey", isDirectory: true)
         if !fm.fileExists(atPath: directory.path) {
             try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         }

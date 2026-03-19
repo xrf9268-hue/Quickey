@@ -1,7 +1,7 @@
 # Handoff Notes
 
 ## Current state
-HotApp Clone is a strong prototype scaffold, not yet a validated macOS product.
+Quickey is a strong prototype scaffold, not yet a validated macOS product.
 
 Already in place:
 - SPM-only Swift project structure

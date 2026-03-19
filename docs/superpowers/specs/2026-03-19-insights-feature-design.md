@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add usage statistics tracking and an Insights tab to HotApp Clone, allowing users to see how often they use each shortcut, identify unused shortcuts, and view usage trends over time.
+Add usage statistics tracking and an Insights tab to Quickey, allowing users to see how often they use each shortcut, identify unused shortcuts, and view usage trends over time.
 
 ## Goals
 
@@ -13,7 +13,7 @@ Add usage statistics tracking and an Insights tab to HotApp Clone, allowing user
 
 ### Storage
 
-SQLite database at `~/Library/Application Support/HotAppClone/usage.db`. Chosen over JSON because usage tracking requires frequent writes (every shortcut trigger) and time-based aggregation queries.
+SQLite database at `~/Library/Application Support/Quickey/usage.db`. Chosen over JSON because usage tracking requires frequent writes (every shortcut trigger) and time-based aggregation queries.
 
 ### Schema
 
@@ -31,7 +31,7 @@ Daily aggregation only — no raw event storage. This keeps the database tiny (y
 ### Database Initialization
 
 On first launch, `UsageTracker.init` will:
-1. Ensure `~/Library/Application Support/HotAppClone/` directory exists (via `FileManager.createDirectory`)
+1. Ensure `~/Library/Application Support/Quickey/` directory exists (via `FileManager.createDirectory`)
 2. Open (or create) `usage.db`
 3. Run `CREATE TABLE IF NOT EXISTS daily_usage (...)`
 
@@ -129,12 +129,12 @@ Design follows Apple Screen Time's visual language: one headline number, one cha
 
 | File | Purpose |
 |------|---------|
-| `Sources/HotAppClone/Services/UsageTracker.swift` | SQLite-based usage recording and querying |
-| `Sources/HotAppClone/UI/InsightsTabView.swift` | Insights tab SwiftUI view |
-| `Sources/HotAppClone/UI/InsightsViewModel.swift` | Data preparation for Insights view |
-| `Sources/HotAppClone/UI/ShortcutsTabView.swift` | Extracted shortcuts tab content |
-| `Sources/HotAppClone/UI/GeneralTabView.swift` | General settings tab |
-| `Sources/HotAppClone/UI/BarChartView.swift` | Reusable bar chart component |
+| `Sources/Quickey/Services/UsageTracker.swift` | SQLite-based usage recording and querying |
+| `Sources/Quickey/UI/InsightsTabView.swift` | Insights tab SwiftUI view |
+| `Sources/Quickey/UI/InsightsViewModel.swift` | Data preparation for Insights view |
+| `Sources/Quickey/UI/ShortcutsTabView.swift` | Extracted shortcuts tab content |
+| `Sources/Quickey/UI/GeneralTabView.swift` | General settings tab |
+| `Sources/Quickey/UI/BarChartView.swift` | Reusable bar chart component |
 
 ### Modified Files
 

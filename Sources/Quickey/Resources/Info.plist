@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleExecutable</key><string>HotAppClone</string>
-  <key>CFBundleIdentifier</key><string>com.xrf9268.hotapp-clone</string>
+  <key>CFBundleExecutable</key><string>Quickey</string>
+  <key>CFBundleIdentifier</key><string>com.quickey.app</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Quickey</string>
   <key>CFBundleDisplayName</key><string>Quickey</string>

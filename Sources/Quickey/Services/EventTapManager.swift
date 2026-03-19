@@ -3,7 +3,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import os.log
 
-private let logger = Logger(subsystem: "com.hotappclone", category: "EventTapManager")
+private let logger = Logger(subsystem: "com.quickey.app", category: "EventTapManager")
 
 @MainActor
 final class EventTapManager {

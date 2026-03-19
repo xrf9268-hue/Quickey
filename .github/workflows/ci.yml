@@ -29,6 +29,6 @@ jobs:
 
       - name: Verify app bundle
         run: |
-          test -f build/HotAppClone.app/Contents/MacOS/HotAppClone
-          test -f build/HotAppClone.app/Contents/Info.plist
-          file build/HotAppClone.app/Contents/MacOS/HotAppClone | grep -q "Mach-O"
+          test -f build/Quickey.app/Contents/MacOS/Quickey
+          test -f build/Quickey.app/Contents/Info.plist
+          file build/Quickey.app/Contents/MacOS/Quickey | grep -q "Mach-O"
