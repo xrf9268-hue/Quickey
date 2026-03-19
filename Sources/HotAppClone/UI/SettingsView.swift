@@ -42,6 +42,12 @@ struct SettingsView: View {
                 TextField("Modifiers (comma separated)", text: $viewModel.modifierFlagsText)
             }
 
+            if let conflictMessage = viewModel.conflictMessage {
+                Text(conflictMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             Button("Add Shortcut") {
                 viewModel.addShortcut()
             }

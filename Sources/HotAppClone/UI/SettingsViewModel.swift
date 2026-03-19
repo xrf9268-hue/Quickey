@@ -9,10 +9,12 @@ final class SettingsViewModel: ObservableObject {
     @Published var keyEquivalent: String = ""
     @Published var modifierFlagsText: String = "command,option"
     @Published var accessibilityGranted: Bool = false
+    @Published var conflictMessage: String?
 
     private let shortcutStore: ShortcutStore
     private let shortcutManager: ShortcutManager
     private let appBundleLocator = AppBundleLocator()
+    private let shortcutValidator = ShortcutValidator()
 
     init(shortcutStore: ShortcutStore, shortcutManager: ShortcutManager) {
         self.shortcutStore = shortcutStore
@@ -27,23 +29,31 @@ final class SettingsViewModel: ObservableObject {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
+        let normalizedKey = shortcutValidator.normalizedKey(keyEquivalent)
+
         guard !selectedAppName.isEmpty,
               !selectedBundleIdentifier.isEmpty,
-              !keyEquivalent.isEmpty else {
+              !normalizedKey.isEmpty else {
+            return
+        }
+
+        let candidate = AppShortcut(
+            appName: selectedAppName,
+            bundleIdentifier: selectedBundleIdentifier,
+            keyEquivalent: normalizedKey,
+            modifierFlags: modifiers
+        )
+
+        if let conflict = shortcutValidator.conflict(for: candidate, in: shortcuts) {
+            conflictMessage = "Conflict: \(conflict.existingShortcut.appName) already uses \(conflict.existingShortcut.modifierFlags.joined(separator: "+"))+\(conflict.existingShortcut.keyEquivalent.uppercased())"
             return
         }
 
         var updated = shortcuts
-        updated.append(
-            AppShortcut(
-                appName: selectedAppName,
-                bundleIdentifier: selectedBundleIdentifier,
-                keyEquivalent: keyEquivalent,
-                modifierFlags: modifiers
-            )
-        )
+        updated.append(candidate)
         shortcuts = updated
         shortcutManager.save(shortcuts: updated)
+        conflictMessage = nil
         resetDraft()
     }
 

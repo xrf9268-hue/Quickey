@@ -35,6 +35,37 @@ struct KeyMatcher {
         case "x": return CGKeyCode(kVK_ANSI_X)
         case "y": return CGKeyCode(kVK_ANSI_Y)
         case "z": return CGKeyCode(kVK_ANSI_Z)
+        case "0": return CGKeyCode(kVK_ANSI_0)
+        case "1": return CGKeyCode(kVK_ANSI_1)
+        case "2": return CGKeyCode(kVK_ANSI_2)
+        case "3": return CGKeyCode(kVK_ANSI_3)
+        case "4": return CGKeyCode(kVK_ANSI_4)
+        case "5": return CGKeyCode(kVK_ANSI_5)
+        case "6": return CGKeyCode(kVK_ANSI_6)
+        case "7": return CGKeyCode(kVK_ANSI_7)
+        case "8": return CGKeyCode(kVK_ANSI_8)
+        case "9": return CGKeyCode(kVK_ANSI_9)
+        case "space": return CGKeyCode(kVK_Space)
+        case "return", "enter": return CGKeyCode(kVK_Return)
+        case "escape", "esc": return CGKeyCode(kVK_Escape)
+        case "tab": return CGKeyCode(kVK_Tab)
+        case "delete", "backspace": return CGKeyCode(kVK_Delete)
+        case "up": return CGKeyCode(kVK_UpArrow)
+        case "down": return CGKeyCode(kVK_DownArrow)
+        case "left": return CGKeyCode(kVK_LeftArrow)
+        case "right": return CGKeyCode(kVK_RightArrow)
+        case "f1": return CGKeyCode(kVK_F1)
+        case "f2": return CGKeyCode(kVK_F2)
+        case "f3": return CGKeyCode(kVK_F3)
+        case "f4": return CGKeyCode(kVK_F4)
+        case "f5": return CGKeyCode(kVK_F5)
+        case "f6": return CGKeyCode(kVK_F6)
+        case "f7": return CGKeyCode(kVK_F7)
+        case "f8": return CGKeyCode(kVK_F8)
+        case "f9": return CGKeyCode(kVK_F9)
+        case "f10": return CGKeyCode(kVK_F10)
+        case "f11": return CGKeyCode(kVK_F11)
+        case "f12": return CGKeyCode(kVK_F12)
         default: return CGKeyCode(UInt16.max)
         }
     }
@@ -45,6 +76,7 @@ struct KeyMatcher {
         if flags.contains(.option) { result.insert("option") }
         if flags.contains(.control) { result.insert("control") }
         if flags.contains(.shift) { result.insert("shift") }
+        if flags.contains(.function) { result.insert("function") }
         return result
     }
 

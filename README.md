@@ -2,22 +2,58 @@
 
 A macOS menu bar utility inspired by Thor and the recovered HotApp article. It binds global shortcuts to target apps, activates them quickly, and toggles them away when pressed again.
 
-## Goals
-- Swift 6 codebase
-- LSUIElement-style menu bar app
-- SwiftUI + AppKit hybrid settings UI
-- Global shortcut registration and persistence
-- Thor-like toggle behavior
-- A clean public-API baseline first
-
-## Status
-Initial scaffold in progress.
+## Current scope
+- Swift 6 / SPM-only project layout
+- Menu bar app shell
+- SwiftUI + AppKit settings window
+- Persistent shortcut storage
+- App picker and shortcut CRUD
+- CGEvent tap baseline for global key capture
+- Accessibility permission check/request flow
+- Basic shortcut conflict detection
+- Packaging scaffold for `.app`
 
 ## Project layout
 - `Package.swift`
 - `Sources/HotAppClone/`
+- `Sources/HotAppClone/Resources/Info.plist`
 - `Tests/HotAppCloneTests/`
 - `docs/clone-scope.md`
+- `docs/packaging-and-permissions.md`
+- `scripts/package-app.sh`
+
+## Run and build
+This repository targets macOS 14+ with Swift 6.
+
+### Build
+```bash
+swift build
+swift test
+```
+
+### Package app scaffold
+```bash
+swift build -c release
+./scripts/package-app.sh
+cp .build/release/HotAppClone build/HotAppClone.app/Contents/MacOS/HotAppClone
+```
+
+### Accessibility
+The app needs Accessibility permission to observe global key events.
+
+- First launch should trigger the permission request path
+- If not granted, open:
+  - System Settings
+  - Privacy & Security
+  - Accessibility
+- Enable the built app bundle
+
+## Known gaps
+- No real shortcut recorder UI yet
+- Key parsing is still manual text entry
+- No SkyLight/private activation path yet
+- No signed/notarized release flow yet
+- Not compiled on this Linux host; final verification must happen on macOS
 
 ## Notes
 This project is an independent clone implementation target, not a workspace snapshot.
