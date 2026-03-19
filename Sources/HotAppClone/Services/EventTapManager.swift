@@ -19,9 +19,15 @@ final class EventTapManager {
     private var retainedBox: Unmanaged<EventTapBox>?
     private var onKeyPress: ShortcutHandler?
 
+    var isRunning: Bool { eventTap != nil }
+
     func start(onKeyPress: @escaping ShortcutHandler) {
+        if isRunning {
+            self.onKeyPress = onKeyPress
+            return
+        }
+
         self.onKeyPress = onKeyPress
-        guard eventTap == nil else { return }
 
         let mask = (1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -34,6 +40,10 @@ final class EventTapManager {
             return Unmanaged.passUnretained(event)
         }
 
+        // EventTapBox uses unowned reference to avoid retain cycle:
+        // EventTapManager → retainedBox → EventTapBox → manager (unowned)
+        // Lifecycle: retainedBox is released in stop(), which always runs
+        // before EventTapManager is deallocated.
         let box = EventTapBox(manager: self)
         let retained = Unmanaged.passRetained(box)
         let userInfo = UnsafeMutableRawPointer(retained.toOpaque())
@@ -59,9 +69,12 @@ final class EventTapManager {
 
         eventTap = tap
         runLoopSource = source
+        logger.info("Event tap started")
     }
 
     func stop() {
+        guard isRunning else { return }
+
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -73,6 +86,7 @@ final class EventTapManager {
         eventTap = nil
         runLoopSource = nil
         onKeyPress = nil
+        logger.info("Event tap stopped")
     }
 
     private func handle(event: CGEvent) {
@@ -82,14 +96,13 @@ final class EventTapManager {
     }
 }
 
+// Boxes the EventTapManager reference for the C callback's userInfo pointer.
+// Uses unowned to break the retain cycle with EventTapManager.retainedBox.
+// Lifetime is explicitly managed: retained in start(), released in stop().
 private final class EventTapBox {
-    let manager: EventTapManager
+    unowned let manager: EventTapManager
 
     init(manager: EventTapManager) {
         self.manager = manager
-    }
-
-    deinit {
-        // intentionally empty; retained by the event tap userInfo lifecycle
     }
 }
