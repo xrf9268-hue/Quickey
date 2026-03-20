@@ -21,7 +21,10 @@ final class AppPreferences {
     }
 
     func refreshPermissions() {
-        accessibilityGranted = shortcutManager.hasAccessibilityAccess()
+        let current = shortcutManager.hasAccessibilityAccess()
+        if current != accessibilityGranted {
+            accessibilityGranted = current
+        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

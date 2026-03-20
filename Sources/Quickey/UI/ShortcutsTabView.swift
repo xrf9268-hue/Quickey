@@ -43,19 +43,7 @@ struct ShortcutsTabView: View {
                     .frame(width: 240, height: 28)
 
                     if let recordedShortcut = editor.recordedShortcut {
-                        HStack(spacing: 4) {
-                            Text(recordedShortcut.displayText)
-                                .font(.system(.body, design: .monospaced))
-                            if recordedShortcut.isHyper {
-                                Text("Hyper")
-                                    .font(.caption2.bold())
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(.purple.opacity(0.2))
-                                    .foregroundStyle(.purple)
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
-                        }
+                        ShortcutLabel(displayText: recordedShortcut.displayText, isHyper: recordedShortcut.isHyper)
                     } else if editor.isRecordingShortcut {
                         Text("Listening…")
                             .foregroundStyle(.secondary)
@@ -92,19 +80,7 @@ struct ShortcutsTabView: View {
                                 .foregroundStyle(.tertiary)
                         }
                         Spacer()
-                        HStack(spacing: 4) {
-                            Text(shortcut.displayText)
-                                .font(.system(.body, design: .monospaced))
-                            if shortcut.isHyper {
-                                Text("Hyper")
-                                    .font(.caption2.bold())
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(.purple.opacity(0.2))
-                                    .foregroundStyle(.purple)
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
-                        }
+                        ShortcutLabel(displayText: shortcut.displayText, isHyper: shortcut.isHyper)
                         Button(role: .destructive) {
                             editor.removeShortcut(id: shortcut.id)
                         } label: {
@@ -113,6 +89,27 @@ struct ShortcutsTabView: View {
                         .buttonStyle(.borderless)
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct ShortcutLabel: View {
+    let displayText: String
+    let isHyper: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(displayText)
+                .font(.system(.body, design: .monospaced))
+            if isHyper {
+                Text("Hyper")
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.purple.opacity(0.2))
+                    .foregroundStyle(.purple)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
             }
         }
     }

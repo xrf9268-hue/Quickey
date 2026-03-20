@@ -1,48 +1,41 @@
 import Foundation
 
+// MARK: - Shared modifier helpers
+
+private let hyperModifiers: Set<String> = ["command", "option", "control", "shift"]
+
+func modifierSymbol(for modifier: String) -> String {
+    switch modifier.lowercased() {
+    case "command": return "⌘"
+    case "option": return "⌥"
+    case "control": return "⌃"
+    case "shift": return "⇧"
+    case "function": return "fn"
+    default: return modifier
+    }
+}
+
+func isHyperCombo(_ modifierFlags: [String]) -> Bool {
+    Set(modifierFlags.map { $0.lowercased() }).isSuperset(of: hyperModifiers)
+}
+
+func modifierDisplayText(modifierFlags: [String], keyEquivalent: String) -> String {
+    modifierFlags.map(modifierSymbol(for:)).joined() + keyEquivalent.uppercased()
+}
+
+// MARK: - RecordedShortcut
+
 struct RecordedShortcut: Equatable {
     var keyEquivalent: String
     var modifierFlags: [String]
 
-    var isHyper: Bool {
-        let normalized = Set(modifierFlags.map { $0.lowercased() })
-        return normalized.isSuperset(of: ["command", "option", "control", "shift"])
-    }
-
-    var displayText: String {
-        let modifiers = modifierFlags.map(Self.symbol(for:)).joined()
-        return modifiers + keyEquivalent.uppercased()
-    }
-
-    private static func symbol(for modifier: String) -> String {
-        switch modifier.lowercased() {
-        case "command": return "⌘"
-        case "option": return "⌥"
-        case "control": return "⌃"
-        case "shift": return "⇧"
-        case "function": return "fn"
-        default: return modifier
-        }
-    }
+    var isHyper: Bool { isHyperCombo(modifierFlags) }
+    var displayText: String { modifierDisplayText(modifierFlags: modifierFlags, keyEquivalent: keyEquivalent) }
 }
 
-extension AppShortcut {
-    var isHyper: Bool {
-        let normalized = Set(modifierFlags.map { $0.lowercased() })
-        return normalized.isSuperset(of: ["command", "option", "control", "shift"])
-    }
+// MARK: - AppShortcut display extensions
 
-    var displayText: String {
-        let symbols = modifierFlags.map { mod -> String in
-            switch mod.lowercased() {
-            case "command": return "⌘"
-            case "option": return "⌥"
-            case "control": return "⌃"
-            case "shift": return "⇧"
-            case "function": return "fn"
-            default: return mod
-            }
-        }.joined()
-        return symbols + keyEquivalent.uppercased()
-    }
+extension AppShortcut {
+    var isHyper: Bool { isHyperCombo(modifierFlags) }
+    var displayText: String { modifierDisplayText(modifierFlags: modifierFlags, keyEquivalent: keyEquivalent) }
 }
