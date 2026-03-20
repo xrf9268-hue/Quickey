@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ShortcutsTabView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

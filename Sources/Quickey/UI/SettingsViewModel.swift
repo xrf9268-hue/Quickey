@@ -1,18 +1,19 @@
 import AppKit
 import Foundation
+import Observation
 
-@MainActor
-final class SettingsViewModel: ObservableObject {
-    @Published var shortcuts: [AppShortcut] = []
-    @Published var selectedAppName: String = ""
-    @Published var selectedBundleIdentifier: String = ""
-    @Published var recordedShortcut: RecordedShortcut?
-    @Published var isRecordingShortcut: Bool = false
-    @Published var accessibilityGranted: Bool = false
-    @Published var conflictMessage: String?
-    @Published var launchAtLoginEnabled: Bool = false
-    @Published var hyperKeyEnabled: Bool = false
-    @Published var usageCounts: [UUID: Int] = [:]
+@Observable @MainActor
+final class SettingsViewModel {
+    var shortcuts: [AppShortcut] = []
+    var selectedAppName: String = ""
+    var selectedBundleIdentifier: String = ""
+    var recordedShortcut: RecordedShortcut?
+    var isRecordingShortcut: Bool = false
+    var accessibilityGranted: Bool = false
+    var conflictMessage: String?
+    var launchAtLoginEnabled: Bool = false
+    var hyperKeyEnabled: Bool = false
+    var usageCounts: [UUID: Int] = [:]
 
     private let shortcutStore: ShortcutStore
     private let shortcutManager: ShortcutManager

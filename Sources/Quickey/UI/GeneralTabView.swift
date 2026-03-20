@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct GeneralTabView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    var viewModel: SettingsViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
