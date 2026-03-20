@@ -3,3 +3,6 @@ build/
 .swiftpm/
 .DS_Store
 *.xcodeproj/xcuserdata/
+*.o
+*.d
+*.swiftdeps
