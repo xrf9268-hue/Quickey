@@ -195,10 +195,16 @@ struct InsightsTabView: View {
 struct KeyPress: Equatable, Hashable, Sendable {
     let keyCode: CGKeyCode
     let modifiers: NSEvent.ModifierFlags
+
+    // NSEvent.ModifierFlags 不原生遵循 Hashable，需自定义实现
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(keyCode)
+        hasher.combine(modifiers.rawValue)
+    }
 }
 ```
 
-`EventTapManager` 中删除嵌套 `KeyPress` 定义，改为使用顶层 `KeyPress`。所有引用 `EventTapManager.KeyPress` 的地方改为 `KeyPress`（涉及 `EventTapManager`、`ShortcutManager`、`KeyMatcher`）。
+`EventTapManager` 中删除嵌套 `KeyPress` 定义和自定义 `Hashable` extension，改为使用顶层 `KeyPress`。所有引用 `EventTapManager.KeyPress` 的地方改为 `KeyPress`（涉及 `EventTapManager`、`ShortcutManager`、`KeyMatcher`、`Tests/QuickeyTests/QuickeyTests.swift`）。
 
 ### 协议定义
 
@@ -262,6 +268,7 @@ final class ShortcutManager {
 | 修改 | `Services/EventTapManager.swift`（删除嵌套 KeyPress，添加协议遵循） |
 | 修改 | `Services/ShortcutManager.swift`（参数类型改为 `any` 协议，`EventTapManager.KeyPress` → `KeyPress`） |
 | 修改 | `Services/KeyMatcher.swift`（`EventTapManager.KeyPress` → `KeyPress`） |
+| 修改 | `Tests/QuickeyTests/QuickeyTests.swift`（`EventTapManager.KeyPress` → `KeyPress`） |
 
 ---
 
