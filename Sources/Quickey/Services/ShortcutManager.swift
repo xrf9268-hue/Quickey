@@ -9,8 +9,8 @@ private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Short
 final class ShortcutManager {
     private let shortcutStore: ShortcutStore
     private let persistenceService: PersistenceService
-    private let appSwitcher: AppSwitcher
-    private let eventTapManager: EventTapManager
+    private let appSwitcher: any AppSwitching
+    private let eventTapManager: any EventTapManaging
     private let permissionService: AccessibilityPermissionService
     private let usageTracker: UsageTracker?
     private let keyMatcher = KeyMatcher()
@@ -22,8 +22,8 @@ final class ShortcutManager {
     init(
         shortcutStore: ShortcutStore,
         persistenceService: PersistenceService,
-        appSwitcher: AppSwitcher,
-        eventTapManager: EventTapManager = EventTapManager(),
+        appSwitcher: any AppSwitching,
+        eventTapManager: any EventTapManaging = EventTapManager(),
         permissionService: AccessibilityPermissionService = AccessibilityPermissionService(),
         usageTracker: UsageTracker? = nil
     ) {

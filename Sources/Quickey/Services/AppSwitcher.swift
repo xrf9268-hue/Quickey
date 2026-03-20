@@ -5,7 +5,7 @@ import os.log
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppSwitcher")
 
 @MainActor
-final class AppSwitcher {
+final class AppSwitcher: AppSwitching {
     private let frontmostTracker: FrontmostApplicationTracker
 
     init(frontmostTracker: FrontmostApplicationTracker = FrontmostApplicationTracker()) {

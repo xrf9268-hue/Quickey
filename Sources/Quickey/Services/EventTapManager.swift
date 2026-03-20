@@ -6,7 +6,7 @@ import os.log
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "EventTapManager")
 
 @MainActor
-final class EventTapManager {
+final class EventTapManager: EventTapManaging {
     /// Returns `true` if the key press was handled and should be consumed (not passed to other apps).
     typealias ShortcutHandler = (KeyPress) -> Bool
 
