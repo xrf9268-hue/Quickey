@@ -204,6 +204,45 @@ Avoid these failure modes:
 - scattering planning updates across multiple docs without keeping them consistent
 - making the repo look more polished while the runtime core is still fragile
 
+## Code review triage
+
+| Priority | Type | Action |
+|----------|------|--------|
+| P0 | Critical bugs, security vulnerabilities, crashes | Must fix before merge |
+| P1 | Logic errors, incorrect behavior, memory leaks | Must fix before merge |
+| P2 | Code quality, naming, non-critical suggestions | Fix if clear; report to user if uncertain |
+| P3 | Style preferences, optional improvements | Note without blocking merge |
+
+## Pull request workflow
+
+Before merging a PR, verify:
+
+1. All verification commands pass (or macOS validation explicitly deferred)
+2. No unresolved P0/P1 review comments
+3. No merge conflicts
+4. PR description includes `Closes #<number>` for the target issue
+
+Merge command:
+
+```bash
+gh pr merge <N> --squash --delete-branch
+```
+
+## TDD discipline
+
+Follow this cycle for all behavior changes:
+
+1. **Write failing test** capturing expected behavior
+2. **Confirm test fails** for the right reason
+3. **Implement minimal solution** to pass the test
+4. **Verify test passes**
+5. **Run full verification suite** before committing
+
+Additional rules:
+- Behavior changes require test coverage
+- Architecture or workflow changes require doc updates (see Documentation rules above)
+- One PR per issue; keep changes focused
+
 ## Delivery checklist
 
 Before wrapping up a change, check:
