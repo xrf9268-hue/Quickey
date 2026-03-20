@@ -19,7 +19,7 @@ Remaining items are tracked in GitHub Issues and [`TODO.md`](./TODO.md).
 - Swift 6 / SPM-only project layout (macOS 14+)
 - Menu bar app (AppKit-first, selective SwiftUI)
 - Tabbed settings window (Shortcuts / General / Insights)
-- Persistent shortcut storage (SQLite) + usage tracking
+- Persistent shortcut storage (JSON) + usage tracking (SQLite)
 - Global key capture via CGEvent tap (dual permission: Accessibility + Input Monitoring)
 - Permission check/request flow with auto-recovery (no relaunch needed)
 - Thor-like toggle semantics (activate, restore previous app, hide as fallback)
