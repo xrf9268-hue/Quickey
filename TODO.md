@@ -7,8 +7,8 @@ For detailed tasks, use the GitHub issues and `docs/issue-priority-plan.md`.
 - [x] Compile on macOS (Swift 6 strict concurrency fixed in #21)
 - [x] Run tests on macOS (comprehensive tests added in #30, CI added in #39)
 - [x] Package a runnable `.app` (packaging automated in #38)
-- [ ] Grant permission and verify global shortcut capture end to end (requires real macOS device)
-- [ ] Validate toggle behavior against real apps (requires real macOS device)
+- [x] Grant permission and verify global shortcut capture end to end (validated 2026-03-20, dual permission Accessibility + Input Monitoring)
+- [x] Validate toggle behavior against real apps (validated 2026-03-20, fixed: unminimize, no-window ⌘N, autorepeat filter)
 
 ## Tier 1 — runtime reliability and architecture correctness
 - [x] Align the permission model with the actual CGEvent tap monitoring path (#23)
@@ -43,6 +43,10 @@ For detailed tasks, use the GitHub issues and `docs/issue-priority-plan.md`.
 - [x] SettingsView refactored into tabbed layout (Shortcuts / General / Insights) (#45, #46)
 
 ## Remaining
-- [ ] Real macOS device validation (end-to-end shortcut capture, toggle, permissions)
+- [x] Real macOS device validation — core flows verified 2026-03-20 (build, permissions, shortcut recording, toggle, Hyper Key, special keys, Insights, fullscreen)
+- [ ] Launch at Login real device verification (#58)
+- [ ] Toggle stability research and refactor (#57)
+- [ ] Hyper Key — document external mapping requirement (#56)
+- [ ] Clean up debug NSLog and temp file logging (#55)
 - [ ] Signed/notarized distributable build (workflow documented in #49, execution pending)
 - [ ] Private SkyLight activation path (deferred, out of scope for now)
