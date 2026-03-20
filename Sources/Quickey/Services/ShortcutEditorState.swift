@@ -102,13 +102,6 @@ final class ShortcutEditorState {
         selectedBundleIdentifier = bundleIdentifier
     }
 
-    func revealApplication() {
-        guard let url = appBundleLocator.applicationURL(for: selectedBundleIdentifier) else {
-            return
-        }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
     func clearRecordedShortcut() {
         recordedShortcut = nil
         isRecordingShortcut = false
