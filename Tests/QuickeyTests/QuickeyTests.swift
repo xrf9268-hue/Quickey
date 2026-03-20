@@ -36,6 +36,96 @@ struct EventTapManagerLifecycleTests {
     }
 }
 
+// MARK: - EventTapManager registered shortcuts & hyper key
+
+@Suite("EventTapManager state management")
+struct EventTapManagerStateTests {
+    @Test @MainActor
+    func updateRegisteredShortcutsStoresKeyPresses() {
+        let manager = EventTapManager()
+        let keyPresses: Set<EventTapManager.KeyPress> = [
+            EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_A), modifiers: [.command]),
+            EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_B), modifiers: [.option]),
+        ]
+        // Should not crash when no tap is running (box is nil)
+        manager.updateRegisteredShortcuts(keyPresses)
+    }
+
+    @Test @MainActor
+    func setHyperKeyEnabledDoesNotCrashWithoutTap() {
+        let manager = EventTapManager()
+        manager.setHyperKeyEnabled(true)
+        manager.setHyperKeyEnabled(false)
+    }
+
+    @Test @MainActor
+    func stopClearsState() {
+        let manager = EventTapManager()
+        manager.onKeyPress = { _ in true }
+        manager.stop()
+        #expect(manager.isRunning == false)
+    }
+}
+
+// MARK: - EventTapManager debounce
+
+@Suite("EventTapManager debounce")
+struct EventTapManagerDebounceTests {
+    @Test @MainActor
+    func sameKeyPressWithinDebounceIntervalIsSkipped() {
+        let manager = EventTapManager()
+        var callCount = 0
+        manager.onKeyPress = { _ in
+            callCount += 1
+            return true
+        }
+        let keyPress = EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_S), modifiers: [.command])
+
+        // First call should go through
+        manager.handleAsync(keyPress)
+        #expect(callCount == 1)
+
+        // Second call with same key within 200ms should be debounced
+        manager.handleAsync(keyPress)
+        #expect(callCount == 1)
+    }
+
+    @Test @MainActor
+    func differentKeyPressesAreNotDebounced() {
+        let manager = EventTapManager()
+        var callCount = 0
+        manager.onKeyPress = { _ in
+            callCount += 1
+            return true
+        }
+        let keyA = EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_A), modifiers: [.command])
+        let keyB = EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_B), modifiers: [.command])
+
+        manager.handleAsync(keyA)
+        #expect(callCount == 1)
+
+        // Different key should not be debounced
+        manager.handleAsync(keyB)
+        #expect(callCount == 2)
+    }
+
+    @Test @MainActor
+    func sameKeyWithDifferentModifiersIsNotDebounced() {
+        let manager = EventTapManager()
+        var callCount = 0
+        manager.onKeyPress = { _ in
+            callCount += 1
+            return true
+        }
+        let cmdA = EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_A), modifiers: [.command])
+        let optA = EventTapManager.KeyPress(keyCode: CGKeyCode(kVK_ANSI_A), modifiers: [.option])
+
+        manager.handleAsync(cmdA)
+        manager.handleAsync(optA)
+        #expect(callCount == 2)
+    }
+}
+
 // MARK: - KeyMatcher
 
 @Suite("KeyMatcher")

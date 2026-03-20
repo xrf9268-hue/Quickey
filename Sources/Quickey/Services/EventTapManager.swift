@@ -18,7 +18,8 @@ final class EventTapManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var retainedBox: Unmanaged<EventTapBox>?
-    private var onKeyPress: ShortcutHandler?
+    // internal for @testable access
+    var onKeyPress: ShortcutHandler?
     private var backgroundThread: BackgroundRunLoopThread?
 
     /// Debounce: minimum interval between triggers for the same shortcut (seconds).
@@ -82,7 +83,7 @@ final class EventTapManager {
 
                 // Dispatch to main thread for handling (AX calls, SkyLight, etc.)
                 DispatchQueue.main.async {
-                    box.manager.handleAsync(keyPress)
+                    box.onKeyPress?(keyPress)
                 }
 
                 // For defaultTap mode: check if this key+modifier combo is registered
@@ -112,7 +113,11 @@ final class EventTapManager {
             }
         }
 
-        let box = EventTapBox(manager: self)
+        let box = EventTapBox()
+        // Store handler for non-isolated access from background thread callback
+        box.onKeyPress = { [weak self] keyPress in
+            self?.handleAsync(keyPress)
+        }
         // Pre-populate registered shortcuts for synchronous swallow decision
         box.registeredShortcuts = registeredKeyPresses
         let retained = Unmanaged.passRetained(box)
@@ -209,7 +214,7 @@ final class EventTapManager {
     }
 
     /// Called on main thread from async dispatch. Applies debounce then calls handler.
-    private func handleAsync(_ keyPress: KeyPress) {
+    func handleAsync(_ keyPress: KeyPress) {
         let now = CFAbsoluteTimeGetCurrent()
 
         // Debounce: skip if same key press within debounceInterval
@@ -280,16 +285,13 @@ private final class BackgroundRunLoopThread: Thread {
 // Lifetime is explicitly managed: retained in start(), released in stop().
 // Also holds the CFMachPort so the callback can re-enable a disabled tap.
 private final class EventTapBox {
-    unowned let manager: EventTapManager
     var tap: CFMachPort?
+    /// Closure dispatched on main thread when a key press is detected.
+    var onKeyPress: ((EventTapManager.KeyPress) -> Void)?
     /// Set of registered key presses for synchronous swallow decisions in the callback.
     var registeredShortcuts: Set<EventTapManager.KeyPress> = []
     /// Whether Hyper Key (Caps Lock → F19) interception is active.
     var hyperKeyEnabled: Bool = false
     /// Whether the Hyper Key (F19) is currently held down.
     var isHyperHeld: Bool = false
-
-    init(manager: EventTapManager) {
-        self.manager = manager
-    }
 }

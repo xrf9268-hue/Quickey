@@ -76,6 +76,12 @@ Highest-value test targets:
 
 If a change cannot be verified on Linux, document what must be verified on macOS.
 
+## Investigation before implementation
+
+- **在没有深入调研、完全搞清楚问题根因之前，不允许修改代码。** 先读日志、读代码、复现问题、确认假设，形成明确结论后才能动手改。
+- 猜测性修复会引入新问题（例：PR #57 后台线程改动未考虑 @MainActor 隔离，导致 Release 模式崩溃）。
+- 如果不确定，写下假设并用日志/测试验证，而不是直接改代码看效果。
+
 ## Editing rules
 
 - Keep changes focused; avoid broad refactors unless clearly justified
