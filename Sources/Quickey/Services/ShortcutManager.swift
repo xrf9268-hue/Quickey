@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import UserNotifications
 import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ShortcutManager")
@@ -14,7 +16,8 @@ final class ShortcutManager {
     private let keyMatcher = KeyMatcher()
     private var triggerIndex: [ShortcutTrigger: AppShortcut] = [:]
     private var permissionTimer: Timer?
-    private var lastPermissionState: Bool = false
+    private var lastAccessibilityState: Bool = false
+    private var lastInputMonitoringState: Bool = false
 
     init(
         shortcutStore: ShortcutStore,
@@ -68,7 +71,8 @@ final class ShortcutManager {
     // MARK: - Permission monitoring
 
     private func startPermissionMonitoring() {
-        lastPermissionState = permissionService.isTrusted()
+        lastAccessibilityState = permissionService.isAccessibilityTrusted()
+        lastInputMonitoringState = permissionService.isInputMonitoringTrusted()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.checkPermissionChange()
@@ -77,20 +81,61 @@ final class ShortcutManager {
     }
 
     private func checkPermissionChange() {
-        let granted = permissionService.isTrusted()
-        logger.info("checkPermission: granted=\(granted) last=\(self.lastPermissionState) tapRunning=\(self.eventTapManager.isRunning)")
-        DiagnosticLog.log("checkPermission: granted=\(granted) last=\(lastPermissionState) tapRunning=\(eventTapManager.isRunning)")
-        guard granted != lastPermissionState else { return }
-        lastPermissionState = granted
+        let axGranted = permissionService.isAccessibilityTrusted()
+        let imGranted = permissionService.isInputMonitoringTrusted()
 
-        if granted {
-            logger.notice("Permission change detected: granted — starting event tap")
-            DiagnosticLog.log("Permission change detected: granted — starting event tap")
+        logger.info("checkPermission: ax=\(axGranted) im=\(imGranted) tapRunning=\(self.eventTapManager.isRunning)")
+        DiagnosticLog.log("checkPermission: ax=\(axGranted) im=\(imGranted) tapRunning=\(eventTapManager.isRunning)")
+
+        // Report individual permission changes
+        if axGranted != lastAccessibilityState {
+            if axGranted {
+                logger.notice("Accessibility permission: granted")
+                DiagnosticLog.log("Accessibility permission: granted")
+            } else {
+                logger.error("Accessibility permission: REVOKED")
+                DiagnosticLog.log("Accessibility permission: REVOKED")
+                sendPermissionNotification(permission: "Accessibility")
+            }
+            lastAccessibilityState = axGranted
+        }
+
+        if imGranted != lastInputMonitoringState {
+            if imGranted {
+                logger.notice("Input Monitoring permission: granted")
+                DiagnosticLog.log("Input Monitoring permission: granted")
+            } else {
+                logger.error("Input Monitoring permission: REVOKED")
+                DiagnosticLog.log("Input Monitoring permission: REVOKED")
+                sendPermissionNotification(permission: "Input Monitoring")
+            }
+            lastInputMonitoringState = imGranted
+        }
+
+        // Handle combined state transitions
+        let nowGranted = axGranted && imGranted
+
+        if nowGranted && !eventTapManager.isRunning {
+            logger.notice("All permissions granted — starting event tap")
+            DiagnosticLog.log("All permissions granted — starting event tap")
             attemptStartIfPermitted()
-        } else {
-            logger.error("Permission change detected: revoked — stopping event tap")
-            DiagnosticLog.log("Permission change detected: revoked — stopping event tap")
+        } else if !nowGranted && eventTapManager.isRunning {
+            logger.error("Permission lost — stopping event tap")
+            DiagnosticLog.log("Permission lost — stopping event tap")
             eventTapManager.stop()
+        }
+    }
+
+    /// Send a user notification when a specific permission is revoked.
+    private func sendPermissionNotification(permission: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Quickey: Permission Lost"
+            content.body = "\(permission) permission was revoked. Quickey needs this permission to work. Please re-enable it in System Settings > Privacy & Security > \(permission)."
+            let request = UNNotificationRequest(identifier: "quickey-permission-\(permission)", content: content, trigger: nil)
+            center.add(request)
         }
     }
 
@@ -125,6 +170,18 @@ final class ShortcutManager {
 
     private func rebuildIndex() {
         triggerIndex = keyMatcher.buildIndex(for: shortcutStore.shortcuts)
+        // Sync registered shortcuts to EventTapManager for synchronous event swallowing
+        syncRegisteredShortcuts()
+    }
+
+    /// Build a Set<KeyPress> from the trigger index and pass it to EventTapManager.
+    private func syncRegisteredShortcuts() {
+        var keyPresses = Set<EventTapManager.KeyPress>()
+        for trigger in triggerIndex.keys {
+            let modifiers = NSEvent.ModifierFlags(rawValue: trigger.modifierMask)
+            keyPresses.insert(EventTapManager.KeyPress(keyCode: trigger.keyCode, modifiers: modifiers))
+        }
+        eventTapManager.updateRegisteredShortcuts(keyPresses)
     }
 
     /// Returns `true` if the key press matched a shortcut (so the event should be consumed).

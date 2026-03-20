@@ -29,3 +29,11 @@ func SLPSPostEventRecordTo(
     _ psn: UnsafeMutablePointer<ProcessSerialNumber>,
     _ bytes: UnsafeMutablePointer<UInt8>
 ) -> CGError
+
+// MARK: - AX private API for getting CGWindowID from AXUIElement
+
+@_silgen_name("_AXUIElementGetWindow") @discardableResult
+func _AXUIElementGetWindow(
+    _ element: AXUIElement,
+    _ windowID: UnsafeMutablePointer<CGWindowID>
+) -> AXError

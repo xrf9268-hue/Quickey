@@ -54,14 +54,161 @@ final class AppSwitcher {
         }
         unminimizeWindows(of: runningApp)
         let activated = activateViaWindowServer(runningApp)
-        // If app has no visible windows, open a new one via Accessibility API (⌘N)
+
+        // If app has no visible windows after activation, try to get one
         if activated && !hasVisibleWindows(of: runningApp) {
-            logger.info("TOGGLE[\(shortcut.appName)]: no visible windows, sending ⌘N")
-            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: no visible windows, sending ⌘N")
-            openNewWindow(of: runningApp)
+            logger.info("TOGGLE[\(shortcut.appName)]: no visible windows after activation")
+            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: no visible windows, attempting recovery")
+            recoverWindowlessApp(runningApp, shortcut: shortcut)
         }
         return activated
     }
+
+    // MARK: - Three-layer activation (reference: alt-tab-macos)
+
+    /// Activate app using three-layer approach:
+    /// 1. _SLPSSetFrontProcessWithOptions — activate the process (with windowID for Space switching)
+    /// 2. SLPSPostEventRecordTo — make the window the key window
+    /// 3. AXUIElementPerformAction(kAXRaiseAction) — ensure correct Z-order
+    private func activateViaWindowServer(_ app: NSRunningApplication) -> Bool {
+        let pid = app.processIdentifier
+        var psn = ProcessSerialNumber()
+        let status = GetProcessForPID(pid, &psn)
+        guard status == noErr else {
+            logger.error("GetProcessForPID failed for pid \(pid): \(status)")
+            DiagnosticLog.log("GetProcessForPID failed for pid \(pid): \(status)")
+            return app.activate(options: .activateIgnoringOtherApps)
+        }
+
+        // Get the first window's CGWindowID for Space-aware activation
+        let windowID = firstWindowID(of: app)
+
+        // Layer 1: Activate the process via SkyLight
+        // Passing a real windowID causes macOS to auto-switch to that window's Space
+        let result = _SLPSSetFrontProcessWithOptions(&psn, windowID ?? 0, SLPSMode.userGenerated.rawValue)
+        if result != .success {
+            logger.error("_SLPSSetFrontProcessWithOptions failed: \(result.rawValue), falling back")
+            DiagnosticLog.log("SkyLight activation failed: \(result.rawValue), falling back to NSRunningApplication.activate")
+            return app.activate(options: .activateIgnoringOtherApps)
+        }
+
+        // Layer 2: Make the target window the key window via WindowServer event
+        if let wid = windowID {
+            makeKeyWindow(psn: &psn, windowID: wid)
+        }
+
+        // Layer 3: Raise the first window via Accessibility to ensure correct Z-order
+        raiseFirstWindow(of: app)
+
+        return true
+    }
+
+    /// Send a WindowServer event to make a specific window the key window.
+    /// Uses the 0xf8 byte pattern from alt-tab-macos.
+    private func makeKeyWindow(psn: inout ProcessSerialNumber, windowID: CGWindowID) {
+        // 176-byte event record (alt-tab pattern: bytes[0x3a] = 0x10, wid at offset 0x3c)
+        var bytes = [UInt8](repeating: 0, count: 0xf8)
+        bytes[0x04] = 0xF8  // record length
+        bytes[0x08] = 0x01  // event type
+        bytes[0x3a] = 0x10  // sub-type: makeKeyWindow
+
+        // Write windowID at offset 0x3c (little-endian UInt32)
+        let widBytes = withUnsafeBytes(of: windowID.littleEndian) { Array($0) }
+        for (i, b) in widBytes.enumerated() {
+            bytes[0x3c + i] = b
+        }
+
+        let postResult = SLPSPostEventRecordTo(&psn, &bytes)
+        if postResult != .success {
+            #if DEBUG
+            logger.debug("makeKeyWindow: SLPSPostEventRecordTo failed: \(postResult.rawValue)")
+            #endif
+        }
+    }
+
+    /// Raise the first window of an app via AX kAXRaiseAction.
+    private func raiseFirstWindow(of app: NSRunningApplication) {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+        guard result == .success, let windows = windowsRef as? [AXUIElement], let firstWindow = windows.first else {
+            return
+        }
+        AXUIElementPerformAction(firstWindow, kAXRaiseAction as CFString)
+    }
+
+    /// Get the CGWindowID of the first window via _AXUIElementGetWindow private API.
+    /// This ID is needed for Space-aware activation and makeKeyWindow.
+    private func firstWindowID(of app: NSRunningApplication) -> CGWindowID? {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+        guard result == .success, let windows = windowsRef as? [AXUIElement], let firstWindow = windows.first else {
+            return nil
+        }
+        var windowID: CGWindowID = 0
+        let axResult = _AXUIElementGetWindow(firstWindow, &windowID)
+        guard axResult == .success, windowID != 0 else {
+            return nil
+        }
+        return windowID
+    }
+
+    // MARK: - Windowless app recovery (reference: alt-tab + Hammerspoon)
+
+    /// Try multiple strategies to get a window for a windowless app:
+    /// 1. AX kAXRaiseAction on the app element — some apps auto-recover
+    /// 2. NSWorkspace.shared.open(url) — like clicking Dock icon
+    /// 3. ⌘N fallback — last resort
+    private func recoverWindowlessApp(_ app: NSRunningApplication, shortcut: AppShortcut) {
+        let pid = app.processIdentifier
+
+        // Strategy 1: Raise the app element itself
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementPerformAction(axApp, kAXRaiseAction as CFString)
+
+        // Check after a short delay if a window appeared
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            if self.hasVisibleWindows(of: app) {
+                logger.info("TOGGLE[\(shortcut.appName)]: window recovered via AX raise")
+                DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovered via AX raise")
+                return
+            }
+
+            // Strategy 2: Re-open via NSWorkspace (like Dock click)
+            if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: shortcut.bundleIdentifier) {
+                let config = NSWorkspace.OpenConfiguration()
+                NSWorkspace.shared.openApplication(at: appURL, configuration: config) { @Sendable _, error in
+                    if let error {
+                        logger.error("TOGGLE[\(shortcut.appName)]: NSWorkspace.open failed: \(error.localizedDescription)")
+                    }
+                }
+
+                // Check after another delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    guard let self else { return }
+                    if self.hasVisibleWindows(of: app) {
+                        logger.info("TOGGLE[\(shortcut.appName)]: window recovered via NSWorkspace.open")
+                        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovered via NSWorkspace.open")
+                        return
+                    }
+
+                    // Strategy 3: Send ⌘N as last resort
+                    logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
+                    DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
+                    self.openNewWindow(of: app)
+                }
+            } else {
+                // No app URL — go straight to ⌘N
+                logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
+                DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
+                self.openNewWindow(of: app)
+            }
+        }
+    }
+
+    // MARK: - Window helpers
 
     /// Unminimize all minimized windows of the given app via Accessibility API.
     private func unminimizeWindows(of app: NSRunningApplication) {
@@ -87,26 +234,6 @@ final class AppSwitcher {
                 #endif
             }
         }
-    }
-
-    /// Activate app using SkyLight private API for reliable foreground activation.
-    /// NSRunningApplication.activate() is unreliable from LSUIElement apps on macOS 14+.
-    private func activateViaWindowServer(_ app: NSRunningApplication) -> Bool {
-        let pid = app.processIdentifier
-        var psn = ProcessSerialNumber()
-        let status = GetProcessForPID(pid, &psn)
-        guard status == noErr else {
-            logger.error("GetProcessForPID failed for pid \(pid): \(status)")
-            DiagnosticLog.log("GetProcessForPID failed for pid \(pid): \(status)")
-            return app.activate(options: .activateIgnoringOtherApps)
-        }
-        let result = _SLPSSetFrontProcessWithOptions(&psn, 0, SLPSMode.userGenerated.rawValue)
-        if result != .success {
-            logger.error("_SLPSSetFrontProcessWithOptions failed: \(result.rawValue), falling back")
-            DiagnosticLog.log("SkyLight activation failed: \(result.rawValue), falling back to NSRunningApplication.activate")
-            return app.activate(options: .activateIgnoringOtherApps)
-        }
-        return true
     }
 
     /// Check if app has any visible (non-minimized) windows.

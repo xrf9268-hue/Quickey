@@ -19,6 +19,12 @@ final class EventTapManager {
     private var runLoopSource: CFRunLoopSource?
     private var retainedBox: Unmanaged<EventTapBox>?
     private var onKeyPress: ShortcutHandler?
+    private var backgroundThread: BackgroundRunLoopThread?
+
+    /// Debounce: minimum interval between triggers for the same shortcut (seconds).
+    private let debounceInterval: TimeInterval = 0.2  // 200ms
+    private var lastTriggerTime: CFAbsoluteTime = 0
+    private var lastTriggerKeyPress: KeyPress?
 
     var isRunning: Bool { eventTap != nil }
 
@@ -30,14 +36,17 @@ final class EventTapManager {
 
         self.onKeyPress = onKeyPress
 
+        // Create dedicated background thread for the event tap RunLoop
+        let thread = BackgroundRunLoopThread()
+        thread.start()
+        backgroundThread = thread
+
         let mask = (1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { proxy, type, event, userInfo in
             let box = Unmanaged<EventTapBox>.fromOpaque(userInfo!).takeUnretainedValue()
 
             switch type {
             case .tapDisabledByTimeout, .tapDisabledByUserInput:
-                // macOS disabled the tap (slow callback or user input flood).
-                // Re-enable it immediately via the stored CFMachPort.
                 logger.warning("EVENT TAP DISABLED by system (reason: \(type.rawValue)), re-enabling")
                 DiagnosticLog.log("EVENT TAP DISABLED by system (reason: \(type.rawValue)), re-enabling")
                 if let tap = box.tap {
@@ -46,10 +55,27 @@ final class EventTapManager {
                 return Unmanaged.passUnretained(event)
 
             case .keyDown:
-                let consumed = box.manager.handle(event: event)
-                if consumed {
-                    // Swallow the event so it doesn't reach the focused app
-                    return nil
+                // Minimal work in callback: extract key info, filter autorepeat, then async dispatch
+                if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+                    return Unmanaged.passUnretained(event)
+                }
+                let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+                let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                let keyPress = KeyPress(
+                    keyCode: keyCode,
+                    modifiers: flags.intersection(.deviceIndependentFlagsMask)
+                )
+
+                // Dispatch to main thread for handling (AX calls, SkyLight, etc.)
+                DispatchQueue.main.async {
+                    box.manager.handleAsync(keyPress)
+                }
+
+                // For defaultTap mode: check if this key+modifier combo is registered
+                // We must decide synchronously whether to swallow the event.
+                // Use the box's registered shortcuts set for a fast O(1) lookup.
+                if box.registeredShortcuts.contains(keyPress) {
+                    return nil  // swallow the event
                 }
                 return Unmanaged.passUnretained(event)
 
@@ -58,11 +84,9 @@ final class EventTapManager {
             }
         }
 
-        // EventTapBox uses unowned reference to avoid retain cycle:
-        // EventTapManager → retainedBox → EventTapBox → manager (unowned)
-        // Lifecycle: retainedBox is released in stop(), which always runs
-        // before EventTapManager is deallocated.
         let box = EventTapBox(manager: self)
+        // Pre-populate registered shortcuts for synchronous swallow decision
+        box.registeredShortcuts = registeredKeyPresses
         let retained = Unmanaged.passRetained(box)
         let userInfo = UnsafeMutableRawPointer(retained.toOpaque())
 
@@ -91,6 +115,8 @@ final class EventTapManager {
         }
         guard let tap else {
             retained.release()
+            backgroundThread?.cancel()
+            backgroundThread = nil
             logger.error("tapCreate: BOTH .defaultTap and .listenOnly failed — ensure Accessibility permission is granted in System Settings > Privacy & Security > Accessibility")
             DiagnosticLog.log("tapCreate: BOTH .defaultTap and .listenOnly failed")
             return
@@ -102,13 +128,16 @@ final class EventTapManager {
         box.tap = tap
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+
+        // Add source to background thread's RunLoop instead of main RunLoop
+        thread.addSource(source!)
+
         CGEvent.tapEnable(tap: tap, enable: true)
 
         eventTap = tap
         runLoopSource = source
-        logger.info("Event tap started")
-        DiagnosticLog.log("Event tap started")
+        logger.info("Event tap started (background thread)")
+        DiagnosticLog.log("Event tap started (background thread)")
     }
 
     func stop() {
@@ -117,27 +146,96 @@ final class EventTapManager {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        if let source = runLoopSource, let thread = backgroundThread {
+            thread.removeSource(source)
         }
+        backgroundThread?.cancel()
+        backgroundThread = nil
         retainedBox?.release()
         retainedBox = nil
         eventTap = nil
         runLoopSource = nil
         onKeyPress = nil
+        lastTriggerTime = 0
+        lastTriggerKeyPress = nil
         logger.info("Event tap stopped")
         DiagnosticLog.log("Event tap stopped")
     }
 
-    /// Returns `true` if the key press matched a shortcut and should be consumed.
-    private func handle(event: CGEvent) -> Bool {
-        // Ignore key-repeat events (user holding key down). Only respond to initial press.
-        if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
-            return false
+    /// Update the set of registered shortcuts for synchronous event swallowing.
+    func updateRegisteredShortcuts(_ keyPresses: Set<KeyPress>) {
+        registeredKeyPresses = keyPresses
+        if let box = retainedBox?.takeUnretainedValue() {
+            box.registeredShortcuts = keyPresses
         }
-        let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
-        let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-        return onKeyPress?(KeyPress(keyCode: keyCode, modifiers: flags.intersection(NSEvent.ModifierFlags.deviceIndependentFlagsMask))) ?? false
+    }
+
+    private var registeredKeyPresses: Set<KeyPress> = []
+
+    /// Called on main thread from async dispatch. Applies debounce then calls handler.
+    private func handleAsync(_ keyPress: KeyPress) {
+        let now = CFAbsoluteTimeGetCurrent()
+
+        // Debounce: skip if same key press within debounceInterval
+        if keyPress == lastTriggerKeyPress,
+           now - lastTriggerTime < debounceInterval {
+            #if DEBUG
+            logger.debug("Debounce: skipping duplicate keyPress within \(self.debounceInterval)s")
+            #endif
+            return
+        }
+
+        lastTriggerTime = now
+        lastTriggerKeyPress = keyPress
+
+        _ = onKeyPress?(keyPress)
+    }
+}
+
+// MARK: - KeyPress Hashable conformance for Set lookup
+
+extension EventTapManager.KeyPress: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(keyCode)
+        hasher.combine(modifiers.rawValue)
+    }
+}
+
+// MARK: - Background RunLoop Thread
+
+/// Dedicated thread with its own RunLoop for hosting the CGEvent tap.
+/// Keeps the tap responsive even if the main thread is busy with UI work.
+private final class BackgroundRunLoopThread: Thread {
+    private var threadRunLoop: CFRunLoop?
+    private let runLoopReady = DispatchSemaphore(value: 0)
+
+    override func main() {
+        threadRunLoop = CFRunLoopGetCurrent()
+        runLoopReady.signal()
+        // Keep the run loop alive with a dummy source
+        let context = CFRunLoopSourceContext()
+        var mutableContext = context
+        let dummySource = CFRunLoopSourceCreate(kCFAllocatorDefault, 0, &mutableContext)
+        CFRunLoopAddSource(threadRunLoop, dummySource, .commonModes)
+        CFRunLoopRun()
+    }
+
+    func addSource(_ source: CFRunLoopSource) {
+        runLoopReady.wait()
+        CFRunLoopAddSource(threadRunLoop, source, .commonModes)
+        CFRunLoopWakeUp(threadRunLoop!)
+    }
+
+    func removeSource(_ source: CFRunLoopSource) {
+        guard let rl = threadRunLoop else { return }
+        CFRunLoopRemoveSource(rl, source, .commonModes)
+    }
+
+    override func cancel() {
+        super.cancel()
+        if let rl = threadRunLoop {
+            CFRunLoopStop(rl)
+        }
     }
 }
 
@@ -148,6 +246,8 @@ final class EventTapManager {
 private final class EventTapBox {
     unowned let manager: EventTapManager
     var tap: CFMachPort?
+    /// Set of registered key presses for synchronous swallow decisions in the callback.
+    var registeredShortcuts: Set<EventTapManager.KeyPress> = []
 
     init(manager: EventTapManager) {
         self.manager = manager
