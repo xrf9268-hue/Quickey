@@ -1,47 +1,48 @@
 import SwiftUI
 
 struct ShortcutsTabView: View {
-    @Bindable var viewModel: SettingsViewModel
+    @Bindable var editor: ShortcutEditorState
+    var preferences: AppPreferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Circle()
-                    .fill(viewModel.accessibilityGranted ? Color.green : Color.orange)
+                    .fill(preferences.accessibilityGranted ? Color.green : Color.orange)
                     .frame(width: 10, height: 10)
-                Text(viewModel.accessibilityGranted ? "Accessibility granted" : "Accessibility required for global shortcuts")
+                Text(preferences.accessibilityGranted ? "Accessibility granted" : "Accessibility required for global shortcuts")
                     .foregroundStyle(.secondary)
                 Button("Refresh") {
-                    viewModel.refreshPermissions()
+                    preferences.refreshPermissions()
                 }
                 Spacer()
             }
 
             HStack(spacing: 12) {
                 Button("Choose App") {
-                    viewModel.chooseApplication()
+                    editor.chooseApplication()
                 }
-                if !viewModel.selectedBundleIdentifier.isEmpty {
+                if !editor.selectedBundleIdentifier.isEmpty {
                     Button("Reveal App") {
-                        viewModel.revealApplication()
+                        editor.revealApplication()
                     }
                 }
-                Text(viewModel.selectedAppName.isEmpty ? "No app selected" : viewModel.selectedAppName)
+                Text(editor.selectedAppName.isEmpty ? "No app selected" : editor.selectedAppName)
                     .foregroundStyle(.secondary)
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Bundle Identifier", text: $viewModel.selectedBundleIdentifier)
+                TextField("Bundle Identifier", text: $editor.selectedBundleIdentifier)
 
                 HStack(spacing: 12) {
                     ShortcutRecorderView(
-                        recordedShortcut: $viewModel.recordedShortcut,
-                        isRecording: $viewModel.isRecordingShortcut
+                        recordedShortcut: $editor.recordedShortcut,
+                        isRecording: $editor.isRecordingShortcut
                     )
                     .frame(width: 240, height: 28)
 
-                    if let recordedShortcut = viewModel.recordedShortcut {
+                    if let recordedShortcut = editor.recordedShortcut {
                         HStack(spacing: 4) {
                             Text(recordedShortcut.displayText)
                                 .font(.system(.body, design: .monospaced))
@@ -55,38 +56,38 @@ struct ShortcutsTabView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                         }
-                    } else if viewModel.isRecordingShortcut {
+                    } else if editor.isRecordingShortcut {
                         Text("Listening…")
                             .foregroundStyle(.secondary)
                     }
 
                     Button("Clear") {
-                        viewModel.clearRecordedShortcut()
+                        editor.clearRecordedShortcut()
                     }
-                    .disabled(viewModel.recordedShortcut == nil && !viewModel.isRecordingShortcut)
+                    .disabled(editor.recordedShortcut == nil && !editor.isRecordingShortcut)
                 }
             }
 
-            if let conflictMessage = viewModel.conflictMessage {
+            if let conflictMessage = editor.conflictMessage {
                 Text(conflictMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
 
             Button("Add Shortcut") {
-                viewModel.addShortcut()
+                editor.addShortcut()
             }
-            .disabled(viewModel.selectedBundleIdentifier.isEmpty || viewModel.recordedShortcut == nil)
+            .disabled(editor.selectedBundleIdentifier.isEmpty || editor.recordedShortcut == nil)
 
             List {
-                ForEach(viewModel.shortcuts) { shortcut in
+                ForEach(editor.shortcuts) { shortcut in
                     HStack {
                         VStack(alignment: .leading) {
                             Text(shortcut.appName)
                             Text(shortcut.bundleIdentifier)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(viewModel.usageCounts[shortcut.id, default: 0])× past 7 days")
+                            Text("\(editor.usageCounts[shortcut.id, default: 0])× past 7 days")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -102,10 +103,10 @@ struct ShortcutsTabView: View {
                                     .background(.purple.opacity(0.2))
                                     .foregroundStyle(.purple)
                                     .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
+                                }
                         }
                         Button(role: .destructive) {
-                            viewModel.removeShortcut(id: shortcut.id)
+                            editor.removeShortcut(id: shortcut.id)
                         } label: {
                             Image(systemName: "trash")
                         }

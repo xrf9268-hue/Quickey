@@ -7,7 +7,8 @@ enum SettingsTab: String, CaseIterable {
 }
 
 struct SettingsView: View {
-    var viewModel: SettingsViewModel
+    var editor: ShortcutEditorState
+    var preferences: AppPreferences
     var insightsViewModel: InsightsViewModel
     @State private var selectedTab: SettingsTab = .shortcuts
 
@@ -22,9 +23,9 @@ struct SettingsView: View {
 
             switch selectedTab {
             case .shortcuts:
-                ShortcutsTabView(viewModel: viewModel)
+                ShortcutsTabView(editor: editor, preferences: preferences)
             case .general:
-                GeneralTabView(viewModel: viewModel)
+                GeneralTabView(preferences: preferences)
             case .insights:
                 InsightsTabView(viewModel: insightsViewModel)
             }
@@ -35,6 +36,9 @@ struct SettingsView: View {
             if newTab == .insights {
                 Task { await insightsViewModel.refresh() }
             }
+        }
+        .onAppear {
+            preferences.refreshPermissions()
         }
     }
 }
