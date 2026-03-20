@@ -38,7 +38,7 @@ final class EventTapManager {
             case .tapDisabledByTimeout, .tapDisabledByUserInput:
                 // macOS disabled the tap (slow callback or user input flood).
                 // Re-enable it immediately via the stored CFMachPort.
-                logger.warning("Event tap disabled by system (reason: \(type.rawValue)), re-enabling")
+                ShortcutManager.debugLog("EVENT TAP DISABLED by system (reason: \(type.rawValue)), re-enabling")
                 if let tap = box.tap {
                     CGEvent.tapEnable(tap: tap, enable: true)
                 }
@@ -124,6 +124,10 @@ final class EventTapManager {
 
     /// Returns `true` if the key press matched a shortcut and should be consumed.
     private func handle(event: CGEvent) -> Bool {
+        // Ignore key-repeat events (user holding key down). Only respond to initial press.
+        if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+            return false
+        }
         let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         return onKeyPress?(KeyPress(keyCode: keyCode, modifiers: flags.intersection(NSEvent.ModifierFlags.deviceIndependentFlagsMask))) ?? false

@@ -141,11 +141,13 @@ final class ShortcutManager {
     /// Returns `true` if the key press matched a shortcut (so the event should be consumed).
     private func handleKeyPress(_ keyPress: EventTapManager.KeyPress) -> Bool {
         let key = keyMatcher.trigger(for: keyPress)
-        NSLog("[DEBUG] handleKeyPress: trigger=(\(key.keyCode), \(key.modifierMask)), index keys: \(triggerIndex.keys.map { ($0.keyCode, $0.modifierMask) })")
+        if !triggerIndex.isEmpty {
+            debugLog("handleKeyPress: trigger=(\(key.keyCode), \(key.modifierMask)), index=\(triggerIndex.keys.map { "(\($0.keyCode),\($0.modifierMask))" }.joined(separator: ","))")
+        }
         guard let match = triggerIndex[key] else {
             return false
         }
-        NSLog("[DEBUG] MATCHED: \(match.appName) - \(match.bundleIdentifier)")
+        debugLog("MATCHED: \(match.appName) - \(match.bundleIdentifier)")
         _ = trigger(match)
         return true
     }
