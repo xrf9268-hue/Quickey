@@ -9,7 +9,8 @@ Quickey is a macOS menu bar utility that binds global shortcuts to target apps w
 Use this file as a concise operating guide. Treat the detailed repository docs as the system of record:
 - `docs/architecture.md` for architecture and module responsibilities
 - `docs/README.md` for maintainer navigation
-- `docs/handoff-notes.md` for recent validation status, open follow-up work, and operational lessons
+- `docs/handoff-notes.md` for recent validation status and open follow-up work
+- `docs/lessons-learned.md` for operational and troubleshooting lessons
 
 ## Environment and platform constraints
 
@@ -93,6 +94,7 @@ If you materially change architecture, workflow, or validation expectations, upd
 
 Key docs to update after meaningful changes:
 - `README.md`
+- `docs/README.md`
 - `docs/architecture.md`
 - `docs/handoff-notes.md`
 

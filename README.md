@@ -27,10 +27,9 @@ cp .build/release/Quickey build/Quickey.app/Contents/MacOS/Quickey
 ```
 
 ## Documentation
-- [`AGENTS.md`](./AGENTS.md)
 - [`docs/README.md`](./docs/README.md)
 - [`docs/architecture.md`](./docs/architecture.md)
 - [`docs/signing-and-release.md`](./docs/signing-and-release.md)
 
 ## Project Status
-Quickey is feature-complete and has been validated on macOS. A signed and notarized release is still pending.
+Quickey is feature-complete. Broad macOS validation has landed, targeted revalidation for the 2026-03-21 remediation set is still pending, and a signed and notarized release is still pending.
