@@ -4,14 +4,11 @@
 Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. The 2026-03-21 remediation set is implemented and GitHub Actions-verified, but the changed runtime paths still need a fresh targeted macOS pass before we can call them revalidated. A signed and notarized distributable is still unresolved.
 
 ## Validated on macOS
-- `swift build`, `swift test`, release build, and `./scripts/package-app.sh` passed on 2026-03-20
-- LSUIElement startup and menu-bar presentation worked as expected
-- Dual permission gating was confirmed: Accessibility plus Input Monitoring
-- Shortcut recording worked for letters, modifiers, Hyper Key, F-keys, arrows, and space
-- Global capture and toggle behavior worked across launch, restore, hide fallback, and launching a not-running app
-- Minimized-window recovery via AX API worked
-- Fullscreen switching worked across Spaces and dual monitors
-- Insights D/W/M views, trend chart, ranking, and restart persistence were validated
+- Broad real-device validation completed on macOS 15.3.1 on 2026-03-20
+- `swift build`, `swift test`, release build, and `./scripts/package-app.sh` passed
+- Dual permission gating, active capture startup, and end-to-end shortcut interception were validated
+- Runtime toggle behavior, restore/hide fallback, and window recovery paths were exercised successfully
+- Insights persistence and restart behavior were confirmed during the macOS pass
 
 ## Follow-up Requiring macOS Validation
 - Launch-at-login approval flow after the 2026-03-21 remediation set
