@@ -3,6 +3,28 @@ import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "HyperKeyService")
 
+private func runHidutil(_ arguments: [String]) -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
+    process.arguments = arguments
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            logger.error("hidutil exited with status \(process.terminationStatus)")
+            DiagnosticLog.log("hidutil exited with status \(process.terminationStatus)")
+            return false
+        }
+        return true
+    } catch {
+        logger.error("hidutil failed: \(error.localizedDescription)")
+        DiagnosticLog.log("hidutil failed: \(error.localizedDescription)")
+        return false
+    }
+}
+
 @MainActor
 final class HyperKeyService {
     typealias HidutilRunner = @Sendable ([String]) -> Bool
@@ -18,7 +40,7 @@ final class HyperKeyService {
     private let defaults: UserDefaults
 
     init(
-        runner: @escaping HidutilRunner = HyperKeyService.runHidutil,
+        runner: @escaping HidutilRunner = runHidutil,
         defaults: UserDefaults = .standard
     ) {
         self.runner = runner
@@ -79,27 +101,5 @@ final class HyperKeyService {
 
     private func clearMapping() -> Bool {
         return runner(["property", "--set", "{\"UserKeyMapping\":[]}"])
-    }
-
-    nonisolated private static func runHidutil(_ arguments: [String]) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
-        process.arguments = arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus != 0 {
-                logger.error("hidutil exited with status \(process.terminationStatus)")
-                DiagnosticLog.log("hidutil exited with status \(process.terminationStatus)")
-                return false
-            }
-            return true
-        } catch {
-            logger.error("hidutil failed: \(error.localizedDescription)")
-            DiagnosticLog.log("hidutil failed: \(error.localizedDescription)")
-            return false
-        }
     }
 }
