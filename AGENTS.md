@@ -8,8 +8,9 @@ Quickey is a macOS menu bar utility that binds global shortcuts to target apps w
 
 Use this file as a concise operating guide. Treat the detailed repository docs as the system of record:
 - `docs/architecture.md` for architecture and module responsibilities
-- `TODO.md` for current priorities
-- `docs/handoff-notes.md` for recent validation status, open follow-up work, and operational lessons
+- `docs/README.md` for maintainer navigation
+- `docs/handoff-notes.md` for recent validation status and open follow-up work
+- `docs/lessons-learned.md` for operational and troubleshooting lessons
 
 ## Environment and platform constraints
 
@@ -93,16 +94,14 @@ If you materially change architecture, workflow, or validation expectations, upd
 
 Key docs to update after meaningful changes:
 - `README.md`
-- `TODO.md`
+- `docs/README.md`
 - `docs/architecture.md`
 - `docs/handoff-notes.md`
 
-Keep `TODO.md` high-level. Do not duplicate the full issue tracker.
-
 ## Source of truth for planning
 
-1. GitHub Issues
-2. `TODO.md`
-3. `docs/handoff-notes.md`
+1. GitHub Issues are the only planning and task-tracking source of truth.
+2. `docs/handoff-notes.md` provides supporting context for current state, validation, and follow-up work.
+3. `docs/README.md` provides maintainer navigation and entry points, not planning status.
 
 Historical completion logs are in `docs/archive/issue-priority-plan.md`.
