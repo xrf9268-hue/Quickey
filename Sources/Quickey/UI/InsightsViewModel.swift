@@ -54,14 +54,10 @@ final class InsightsViewModel {
         self.shortcutStore = shortcutStore
     }
 
-    deinit {
-        refreshTask?.cancel()
-    }
-
     func scheduleRefresh() {
         refreshTask?.cancel()
         let selectedPeriod = period
-        refreshTask = Task { [weak self] in
+        refreshTask = Task { @MainActor [weak self] in
             await self?.refresh(for: selectedPeriod)
         }
     }
