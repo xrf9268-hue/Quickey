@@ -15,11 +15,11 @@ enum LaunchAtLoginStatus: Equatable {
 }
 
 struct LaunchAtLoginService {
-    struct Client {
-        let status: () -> SMAppService.Status
-        let register: () throws -> Void
-        let unregister: () throws -> Void
-        let openSystemSettingsLoginItems: () -> Void
+    struct Client: Sendable {
+        let status: @Sendable () -> SMAppService.Status
+        let register: @Sendable () throws -> Void
+        let unregister: @Sendable () throws -> Void
+        let openSystemSettingsLoginItems: @Sendable () -> Void
     }
 
     private let client: Client
