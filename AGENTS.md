@@ -98,8 +98,8 @@ Key docs to update after meaningful changes:
 
 ## Source of truth for planning
 
-1. GitHub Issues
-2. `docs/handoff-notes.md`
-3. `docs/README.md`
+1. GitHub Issues are the only planning and task-tracking source of truth.
+2. `docs/handoff-notes.md` provides supporting context for current state, validation, and follow-up work.
+3. `docs/README.md` provides maintainer navigation and entry points, not planning status.
 
 Historical completion logs are in `docs/archive/issue-priority-plan.md`.
