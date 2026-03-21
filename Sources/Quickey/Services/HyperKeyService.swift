@@ -81,7 +81,7 @@ final class HyperKeyService {
         return runner(["property", "--set", "{\"UserKeyMapping\":[]}"])
     }
 
-    private static func runHidutil(_ arguments: [String]) -> Bool {
+    nonisolated private static func runHidutil(_ arguments: [String]) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
         process.arguments = arguments
