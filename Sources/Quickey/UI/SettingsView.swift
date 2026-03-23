@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable {
@@ -8,29 +7,29 @@ enum SettingsTab: String, CaseIterable {
     case insights = "Insights"
 }
 
+@MainActor
+struct SettingsViewLifecycleHandler {
+    let preferences: AppPreferences
+
+    func handleAppear() {
+        preferences.refreshPermissions()
+        preferences.refreshLaunchAtLoginStatus()
+    }
+
+    func handleAppDidBecomeActive() {
+        preferences.refreshLaunchAtLoginStatus()
+    }
+}
+
 struct SettingsView: View {
     var editor: ShortcutEditorState
     var preferences: AppPreferences
     var insightsViewModel: InsightsViewModel
     var appListProvider: AppListProvider
-    var appDidBecomeActivePublisher: AnyPublisher<Void, Never>
     @State private var selectedTab: SettingsTab = .shortcuts
 
-    init(
-        editor: ShortcutEditorState,
-        preferences: AppPreferences,
-        insightsViewModel: InsightsViewModel,
-        appListProvider: AppListProvider,
-        appDidBecomeActivePublisher: AnyPublisher<Void, Never> = NotificationCenter.default
-            .publisher(for: NSApplication.didBecomeActiveNotification)
-            .map { _ in () }
-            .eraseToAnyPublisher()
-    ) {
-        self.editor = editor
-        self.preferences = preferences
-        self.insightsViewModel = insightsViewModel
-        self.appListProvider = appListProvider
-        self.appDidBecomeActivePublisher = appDidBecomeActivePublisher
+    private var lifecycleHandler: SettingsViewLifecycleHandler {
+        SettingsViewLifecycleHandler(preferences: preferences)
     }
 
     var body: some View {
@@ -59,11 +58,10 @@ struct SettingsView: View {
             }
         }
         .onAppear {
-            preferences.refreshPermissions()
-            preferences.refreshLaunchAtLoginStatus()
+            lifecycleHandler.handleAppear()
         }
-        .onReceive(appDidBecomeActivePublisher) { _ in
-            preferences.refreshLaunchAtLoginStatus()
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            lifecycleHandler.handleAppDidBecomeActive()
         }
     }
 }

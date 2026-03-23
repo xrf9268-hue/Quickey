@@ -1,118 +1,78 @@
-import AppKit
-import Combine
 import Foundation
 import ServiceManagement
-import SwiftUI
 import Testing
 @testable import Quickey
 
-@Suite("SettingsView", .serialized)
-struct SettingsViewTests {
-    @Test @MainActor
-    func onAppearAndAppReactivationRefreshLaunchAtLoginStatusFromLiveServiceState() async {
-        let activationSubject = PassthroughSubject<Void, Never>()
-        let launchAtLoginState = MutableLaunchAtLoginState(status: .notRegistered)
-        let preferences = makePreferences(state: launchAtLoginState)
-
-        #expect(preferences.launchAtLoginStatus == .disabled)
-
-        launchAtLoginState.statusValue = .requiresApproval
-
-        let hostedView = hostSettingsView(
-            preferences: preferences,
-            appDidBecomeActivePublisher: activationSubject.eraseToAnyPublisher()
-        )
-        defer {
-            hostedView.close()
-            pumpMainRunLoop()
-        }
-
-        pumpMainRunLoop()
-
-        #expect(preferences.launchAtLoginStatus == .requiresApproval)
-
-        launchAtLoginState.statusValue = .enabled
-        activationSubject.send(())
-        pumpMainRunLoop()
-
-        #expect(preferences.launchAtLoginStatus == .enabled)
-    }
-}
-
-@MainActor
-private func hostSettingsView(
-    preferences: AppPreferences,
-    appDidBecomeActivePublisher: AnyPublisher<Void, Never>
-) -> HostedSettingsView {
-    _ = NSApplication.shared
-
-    let controller = NSHostingController(rootView: SettingsView(
-        editor: makeEditor(),
-        preferences: preferences,
-        insightsViewModel: makeInsightsViewModel(),
-        appListProvider: makeAppListProvider(),
-        appDidBecomeActivePublisher: appDidBecomeActivePublisher
-    ))
-    let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 700, height: 480),
-        styleMask: [.titled, .closable],
-        backing: .buffered,
-        defer: false
+@Test @MainActor
+func handleAppearRefreshesPermissionsAndLaunchAtLoginStatusFromLiveServiceState() {
+    let permissionState = MutablePermissionState(ax: false, input: false)
+    let launchAtLoginState = MutableLaunchAtLoginState(status: .notRegistered)
+    let preferences = makePreferences(
+        permissionState: permissionState,
+        launchAtLoginState: launchAtLoginState
     )
-    window.contentViewController = controller
 
-    return HostedSettingsView(window: window)
-}
-
-@MainActor
-private func pumpMainRunLoop(iterations: Int = 3) {
-    for _ in 0..<iterations {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-}
-
-@MainActor
-private func makeEditor() -> ShortcutEditorState {
-    ShortcutEditorState(
-        shortcutStore: ShortcutStore(),
-        shortcutManager: makeShortcutManager(
-            permissionService: FakePermissionService(ax: true, input: true),
-            eventTapManager: FakeEventTapManager()
-        )
-    )
-}
-
-@MainActor
-private func makeInsightsViewModel() -> InsightsViewModel {
-    InsightsViewModel(usageTracker: nil, shortcutStore: ShortcutStore())
-}
-
-@MainActor
-private func makeAppListProvider() -> AppListProvider {
-    AppListProvider(client: .init(
-        now: Date.init,
-        scanInstalledApps: { [] },
-        runningApplications: { [] },
-        loadRecents: { [] },
-        saveRecents: { _ in },
-        mainBundleIdentifier: { nil }
+    #expect(preferences.shortcutCaptureStatus == ShortcutCaptureStatus(
+        accessibilityGranted: false,
+        inputMonitoringGranted: false,
+        eventTapActive: false
     ))
+    #expect(preferences.launchAtLoginStatus == .disabled)
+
+    permissionState.ax = true
+    permissionState.input = true
+    launchAtLoginState.statusValue = .requiresApproval
+
+    SettingsViewLifecycleHandler(preferences: preferences).handleAppear()
+
+    #expect(preferences.shortcutCaptureStatus == ShortcutCaptureStatus(
+        accessibilityGranted: true,
+        inputMonitoringGranted: true,
+        eventTapActive: false
+    ))
+    #expect(preferences.launchAtLoginStatus == .requiresApproval)
+}
+
+@Test @MainActor
+func handleAppDidBecomeActiveRefreshesOnlyLaunchAtLoginStatus() {
+    let permissionState = MutablePermissionState(ax: false, input: false)
+    let launchAtLoginState = MutableLaunchAtLoginState(status: .requiresApproval)
+    let preferences = makePreferences(
+        permissionState: permissionState,
+        launchAtLoginState: launchAtLoginState
+    )
+
+    permissionState.ax = true
+    permissionState.input = true
+    launchAtLoginState.statusValue = .enabled
+
+    SettingsViewLifecycleHandler(preferences: preferences).handleAppDidBecomeActive()
+
+    #expect(preferences.shortcutCaptureStatus == ShortcutCaptureStatus(
+        accessibilityGranted: false,
+        inputMonitoringGranted: false,
+        eventTapActive: false
+    ))
+    #expect(preferences.launchAtLoginStatus == .enabled)
 }
 
 @MainActor
-private func makePreferences(state: MutableLaunchAtLoginState) -> AppPreferences {
+private func makePreferences(
+    permissionState: MutablePermissionState,
+    launchAtLoginState: MutableLaunchAtLoginState
+) -> AppPreferences {
     AppPreferences(
         shortcutManager: makeShortcutManager(
-            permissionService: FakePermissionService(ax: true, input: true),
+            permissionService: FakePermissionService(state: permissionState),
             eventTapManager: FakeEventTapManager()
         ),
         launchAtLoginService: LaunchAtLoginService(client: .init(
-            status: { state.statusValue },
+            status: { launchAtLoginState.statusValue },
             register: {
-                state.statusValue = .enabled
+                launchAtLoginState.statusValue = .enabled
             },
             unregister: {
-                state.statusValue = .notRegistered
+                launchAtLoginState.statusValue = .notRegistered
             },
             openSystemSettingsLoginItems: {}
         ))
@@ -133,31 +93,29 @@ private func makeShortcutManager(
     )
 }
 
-private struct HostedSettingsView {
-    let window: NSWindow
+private final class MutablePermissionState: @unchecked Sendable {
+    var ax: Bool
+    var input: Bool
 
-    @MainActor
-    func close() {
-        window.contentViewController = nil
-        window.orderOut(nil)
-        window.close()
+    init(ax: Bool, input: Bool) {
+        self.ax = ax
+        self.input = input
     }
 }
 
 private struct FakePermissionService: PermissionServicing {
-    let ax: Bool
-    let input: Bool
+    let state: MutablePermissionState
 
     func isTrusted() -> Bool {
-        ax && input
+        state.ax && state.input
     }
 
     func isAccessibilityTrusted() -> Bool {
-        ax
+        state.ax
     }
 
     func isInputMonitoringTrusted() -> Bool {
-        input
+        state.input
     }
 
     @discardableResult
