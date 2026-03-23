@@ -121,6 +121,7 @@ Responsibilities:
 Responsibilities:
 - activate target apps
 - launch installed apps if not already running
+- fall back to `NSWorkspace` reopen requests before plain AppKit activation requests when SkyLight activation cannot complete
 - restore previous app when toggling away
 - hide target app as fallback
 - reveal selected application in Finder when needed
@@ -191,8 +192,10 @@ Global keyDown event
 - **O(1) trigger index**: `ShortcutSignature` dictionary replaces linear scans in the hot path
 - **Hardened EventTap lifecycle**: explicit ownership, auto-recovery on disable/timeout, run-loop cleanup
 - **Active tap only**: passive `.listenOnly` mode is not used in the normal interception path because it cannot consume shortcut events
-- **SkyLight activation path**: private API is used for reliable foreground switching from LSUIElement context
+- **SkyLight primary activation path**: private API is used for reliable foreground switching from LSUIElement context
+- **Modern AppKit fallback**: when SkyLight activation fails, Quickey re-requests activation via `NSWorkspace.OpenConfiguration` (`activates = true`) and only falls back to a plain AppKit activation request if no bundle URL is available
 - **Best-effort toggle semantics**: activate → restore previous app → hide fallback
+- **Service-level test seams**: system-facing services use small injected clients or existing collaborators so runtime decision logic can be covered without live TCC or app-launch side effects
 - **UsageTracker**: SQLite-backed daily usage aggregation off the main actor
 - **Launch-at-login status modeling**: `LaunchAtLoginStatus` preserves enabled / approval-needed / disabled / not-found states
 

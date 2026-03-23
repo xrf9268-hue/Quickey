@@ -12,9 +12,24 @@ struct AppEntry: Identifiable, Hashable {
     var bundleIdentifier: String { id }
 }
 
+struct RunningApplicationSnapshot: Sendable {
+    let bundleIdentifier: String?
+    let localizedName: String?
+    let bundleURL: URL?
+}
+
 @MainActor
 @Observable
 final class AppListProvider {
+    struct Client: Sendable {
+        let now: @Sendable () -> Date
+        let scanInstalledApps: @Sendable () async -> [AppEntry]
+        let runningApplications: @MainActor () -> [RunningApplicationSnapshot]
+        let loadRecents: @Sendable () -> [String]?
+        let saveRecents: @Sendable ([String]) -> Void
+        let mainBundleIdentifier: @Sendable () -> String?
+    }
+
     private(set) var allApps: [AppEntry] = []
     private(set) var recentBundleIDs: [String] = []
     private var lastScanTime: Date?
@@ -25,33 +40,27 @@ final class AppListProvider {
     }
 
     private var isScanning = false
+    private let client: Client
+    private var refreshTask: Task<Void, Never>?
+
+    init(client: Client = .live) {
+        self.client = client
+    }
 
     func refreshIfNeeded() {
-        if let lastScan = lastScanTime, Date().timeIntervalSince(lastScan) < 60 {
+        if let lastScan = lastScanTime, client.now().timeIntervalSince(lastScan) < 60 {
             return
         }
         guard !isScanning else { return }
         isScanning = true
-        Task.detached {
-            let scanned = Self.scanInstalledApps()
-            await MainActor.run { [self] in
-                var entries = scanned
-                var seen = Set(entries.map(\.id))
-                // Running apps must be queried on main thread
-                for app in NSWorkspace.shared.runningApplications {
-                    guard let bid = app.bundleIdentifier,
-                          !seen.contains(bid),
-                          let url = app.bundleURL else { continue }
-                    let name = app.localizedName ?? url.deletingPathExtension().lastPathComponent
-                    entries.append(AppEntry(id: bid, name: name, url: url))
-                    seen.insert(bid)
-                }
-                entries.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                self.allApps = entries
-                self.lastScanTime = Date()
-                self.loadRecents()
-                self.isScanning = false
-            }
+        refreshTask = Task { [client] in
+            let scanned = await client.scanInstalledApps()
+            let runningApplications = client.runningApplications()
+            applyRefresh(
+                scanned: scanned,
+                runningApplications: runningApplications,
+                now: client.now()
+            )
         }
     }
 
@@ -62,6 +71,10 @@ final class AppListProvider {
             recentBundleIDs = Array(recentBundleIDs.prefix(10))
         }
         saveRecents()
+    }
+
+    func waitForRefreshForTesting() async {
+        await refreshTask?.value
     }
 
     func filteredApps(query: String) -> [AppEntry] {
@@ -93,6 +106,31 @@ final class AppListProvider {
         return entries
     }
 
+    private func applyRefresh(
+        scanned: [AppEntry],
+        runningApplications: [RunningApplicationSnapshot],
+        now: Date
+    ) {
+        var entries = scanned
+        var seen = Set(entries.map(\.id))
+
+        for app in runningApplications {
+            guard let bid = app.bundleIdentifier,
+                  !seen.contains(bid),
+                  let url = app.bundleURL else { continue }
+            let name = app.localizedName ?? url.deletingPathExtension().lastPathComponent
+            entries.append(AppEntry(id: bid, name: name, url: url))
+            seen.insert(bid)
+        }
+
+        entries.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        allApps = entries
+        lastScanTime = now
+        loadRecents(from: runningApplications)
+        isScanning = false
+        refreshTask = nil
+    }
+
     nonisolated private static func scanDirectory(_ dir: URL, into entries: inout [AppEntry], seen: inout Set<String>, depth: Int) {
         guard depth < 3 else { return }
         let fm = FileManager.default
@@ -121,18 +159,12 @@ final class AppListProvider {
 
     // MARK: - Recents persistence
 
-    private var recentsURL: URL? {
-        StoragePaths.appSupportDirectory()?.appendingPathComponent("recent-apps.json")
-    }
-
-    private func loadRecents() {
-        guard let url = recentsURL,
-              let data = try? Data(contentsOf: url),
-              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+    private func loadRecents(from runningApplications: [RunningApplicationSnapshot]) {
+        guard let ids = client.loadRecents() else {
             // Seed from running apps if no recents file exists
-            recentBundleIDs = NSWorkspace.shared.runningApplications
+            recentBundleIDs = runningApplications
                 .compactMap(\.bundleIdentifier)
-                .filter { $0 != Bundle.main.bundleIdentifier }
+                .filter { $0 != client.mainBundleIdentifier() }
                 .prefix(10)
                 .map { $0 }
             return
@@ -141,7 +173,56 @@ final class AppListProvider {
     }
 
     private func saveRecents() {
-        guard let url = recentsURL else { return }
+        client.saveRecents(recentBundleIDs)
+    }
+}
+
+extension AppListProvider.Client {
+    static let live = AppListProvider.Client(
+        now: {
+            Date()
+        },
+        scanInstalledApps: {
+            await Task.detached(priority: .userInitiated) {
+                AppListProvider.scanInstalledApps()
+            }.value
+        },
+        runningApplications: {
+            NSWorkspace.shared.runningApplications.map { app in
+                RunningApplicationSnapshot(
+                    bundleIdentifier: app.bundleIdentifier,
+                    localizedName: app.localizedName,
+                    bundleURL: app.bundleURL
+                )
+            }
+        },
+        loadRecents: {
+            AppListProvider.loadRecentsFromDisk()
+        },
+        saveRecents: { recentBundleIDs in
+            AppListProvider.saveRecentsToDisk(recentBundleIDs)
+        },
+        mainBundleIdentifier: {
+            Bundle.main.bundleIdentifier
+        }
+    )
+}
+
+private extension AppListProvider {
+    nonisolated static func recentsURL() -> URL? {
+        StoragePaths.appSupportDirectory()?.appendingPathComponent("recent-apps.json")
+    }
+
+    nonisolated static func loadRecentsFromDisk() -> [String]? {
+        guard let url = recentsURL(),
+              let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+        return try? JSONDecoder().decode([String].self, from: data)
+    }
+
+    nonisolated static func saveRecentsToDisk(_ recentBundleIDs: [String]) {
+        guard let url = recentsURL() else { return }
         do {
             let data = try JSONEncoder().encode(recentBundleIDs)
             try data.write(to: url, options: .atomic)
