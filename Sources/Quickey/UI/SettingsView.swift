@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable {
@@ -40,6 +41,10 @@ struct SettingsView: View {
         }
         .onAppear {
             preferences.refreshPermissions()
+            preferences.refreshLaunchAtLoginStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            preferences.refreshLaunchAtLoginStatus()
         }
     }
 }
