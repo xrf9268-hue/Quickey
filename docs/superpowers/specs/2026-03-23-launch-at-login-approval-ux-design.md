@@ -117,7 +117,7 @@ The `Startup` card keeps `Launch at Login` in its current location as the primar
 | `.enabled` | On | Enabled | None | None |
 | `.disabled` | Off | Enabled | None | None |
 | `.requiresApproval` | On | Enabled | Approval-pending explanation | `Open Login Items Settings` |
-| `.notFound` | Off or unchanged in-place, but disabled | Disabled | Error-style explanation | None |
+| `.notFound` | Off | Disabled | Error-style explanation | None |
 
 #### `.requiresApproval` semantics
 
@@ -170,7 +170,7 @@ Refresh expectations:
 
 - Refresh after every toggle action
 - Refresh when the settings view appears
-- Refresh when the app becomes active again after the user returns from System Settings
+- Refresh when the app becomes active again after the user returns from System Settings, using a single app-activation hook such as `NSApplication.didBecomeActiveNotification`
 
 The last requirement is important because it allows `.requiresApproval` to update to `.enabled` after approval without requiring an app relaunch or a manual settings tab reset.
 
@@ -183,6 +183,7 @@ The menu bar launch-at-login item keeps its current lightweight behavior:
 - `.disabled` / `.notFound` -> unchecked
 
 No extra menu item or explanatory copy is added there. The General tab is the source of detailed explanation.
+Expanding menu bar approval-state behavior beyond the existing mixed-state indicator is out of scope for this issue.
 
 ### 6. Testing Strategy
 
