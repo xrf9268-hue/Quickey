@@ -1,7 +1,7 @@
 # Handoff Notes
 
 ## Current State
-Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. The 2026-03-21 remediation set is implemented and GitHub Actions-verified, but the changed runtime paths still need a fresh targeted macOS pass before we can call them revalidated. A signed and notarized distributable is still unresolved.
+Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-23, the runtime hardening follow-up added service-level test seams for permission, app discovery, frontmost-app restore, preferences, and activation fallback paths, and replaced the deprecated `activateIgnoringOtherApps` fallback with a modern `NSWorkspace` reopen request. Automated `swift test`, `swift test --enable-code-coverage`, `swift build`, and `swift build -c release` passed on 2026-03-23. Coverage for the newly targeted services is now measurable: `AccessibilityPermissionService` 64.29%, `AppListProvider` 40.78%, `AppPreferences` 72.50%, `FrontmostApplicationTracker` 43.64%, and `AppSwitcher` 10.55%. The changed activation/runtime paths still need a fresh targeted macOS pass before we can call them revalidated. A signed and notarized distributable is still unresolved.
 
 ## Validated on macOS
 - Broad real-device validation completed on macOS 15.3.1 on 2026-03-20
@@ -13,6 +13,7 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. The 2026-03-21 reme
 ## Follow-up Requiring macOS Validation
 - Launch-at-login approval flow after the 2026-03-21 remediation set
 - Active event-tap startup and readiness reporting after permission or lifecycle changes
+- AppSwitcher fallback behavior after SkyLight failure now that it re-requests activation via `NSWorkspace`
 - Hyper Key failure handling, especially persistence only after `hidutil` succeeds
 - Insights date-window and refresh-race fixes
 - Signed/notarized distributable workflow once a Developer ID certificate is available
@@ -22,6 +23,7 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. The 2026-03-21 reme
 - Ad-hoc signing changes can invalidate TCC state; use `tccutil reset` during development when needed
 - Launch the app with `open`, not by executing the binary directly, so TCC matches the correct app identity
 - SkyLight is a private API dependency for reliable activation from LSUIElement apps and may block App Store submission
+- If SkyLight activation fails, Quickey now falls back to an `NSWorkspace` reopen request instead of the deprecated `activateIgnoringOtherApps` path
 - Unified logging can hide useful runtime details; file-based debug logs (`~/.config/Quickey/debug.log`) are more reliable for diagnosis
 
 ## Immediate Next Actions

@@ -6,10 +6,37 @@ private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppSw
 
 @MainActor
 final class AppSwitcher: AppSwitching {
-    private let frontmostTracker: FrontmostApplicationTracker
+    enum FrontProcessActivationResult {
+        case success(ProcessSerialNumber)
+        case processLookupFailed(OSStatus)
+        case activationFailed(CGError)
+    }
 
-    init(frontmostTracker: FrontmostApplicationTracker = FrontmostApplicationTracker()) {
+    enum ActivationResult {
+        case skyLight(ProcessSerialNumber)
+        case fallback(Bool)
+    }
+
+    struct ActivationClient {
+        let activateFrontProcess: (pid_t, CGWindowID?) -> FrontProcessActivationResult
+    }
+
+    struct FallbackActivationClient {
+        let openApplication: (URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (Error?) -> Void) -> Void
+    }
+
+    private let frontmostTracker: FrontmostApplicationTracker
+    private let activationClient: ActivationClient
+    private let fallbackActivationClient: FallbackActivationClient
+
+    init(
+        frontmostTracker: FrontmostApplicationTracker = FrontmostApplicationTracker(),
+        activationClient: ActivationClient = .live,
+        fallbackActivationClient: FallbackActivationClient = .live
+    ) {
         self.frontmostTracker = frontmostTracker
+        self.activationClient = activationClient
+        self.fallbackActivationClient = fallbackActivationClient
     }
 
     @discardableResult
@@ -72,35 +99,71 @@ final class AppSwitcher: AppSwitching {
     /// 2. SLPSPostEventRecordTo — make the window the key window
     /// 3. AXUIElementPerformAction(kAXRaiseAction) — ensure correct Z-order
     private func activateViaWindowServer(_ app: NSRunningApplication, windows: [AXUIElement]?) -> Bool {
-        let pid = app.processIdentifier
-        var psn = ProcessSerialNumber()
-        let status = GetProcessForPID(pid, &psn)
-        guard status == noErr else {
-            logger.error("GetProcessForPID failed for pid \(pid): \(status)")
-            DiagnosticLog.log("GetProcessForPID failed for pid \(pid): \(status)")
-            return app.activate(options: .activateIgnoringOtherApps)
-        }
-
         // Get the first window's CGWindowID for Space-aware activation
         let windowID = firstWindowID(from: windows)
+        switch activateProcess(
+            pid: app.processIdentifier,
+            windowID: windowID,
+            fallbackActivate: {
+                self.requestFallbackActivation(
+                    bundleURL: app.bundleURL,
+                    bundleIdentifier: app.bundleIdentifier ?? "\(app.processIdentifier)",
+                    plainActivate: {
+                        app.activate()
+                    }
+                )
+            }
+        ) {
+        case .skyLight(var psn):
+            // Layer 2: Make the target window the key window via WindowServer event
+            if let wid = windowID {
+                makeKeyWindow(psn: &psn, windowID: wid)
+            }
 
-        // Layer 1: Activate the process via SkyLight
-        // Passing a real windowID causes macOS to auto-switch to that window's Space
-        let result = _SLPSSetFrontProcessWithOptions(&psn, windowID ?? 0, SLPSMode.userGenerated.rawValue)
-        if result != .success {
+            // Layer 3: Raise the first window via Accessibility to ensure correct Z-order
+            raiseFirstWindow(from: windows)
+            return true
+        case .fallback(let activated):
+            return activated
+        }
+    }
+
+    func activateProcess(
+        pid: pid_t,
+        windowID: CGWindowID?,
+        fallbackActivate: () -> Bool
+    ) -> ActivationResult {
+        switch activationClient.activateFrontProcess(pid, windowID) {
+        case .success(let psn):
+            return .skyLight(psn)
+        case .processLookupFailed(let status):
+            logger.error("GetProcessForPID failed for pid \(pid): \(status)")
+            DiagnosticLog.log("GetProcessForPID failed for pid \(pid): \(status)")
+            return .fallback(fallbackActivate())
+        case .activationFailed(let result):
             logger.error("_SLPSSetFrontProcessWithOptions failed: \(result.rawValue), falling back")
-            DiagnosticLog.log("SkyLight activation failed: \(result.rawValue), falling back to NSRunningApplication.activate")
-            return app.activate(options: .activateIgnoringOtherApps)
+            DiagnosticLog.log("SkyLight activation failed: \(result.rawValue), falling back to modern activation request")
+            return .fallback(fallbackActivate())
+        }
+    }
+
+    func requestFallbackActivation(
+        bundleURL: URL?,
+        bundleIdentifier: String,
+        plainActivate: () -> Bool
+    ) -> Bool {
+        guard let bundleURL else {
+            return plainActivate()
         }
 
-        // Layer 2: Make the target window the key window via WindowServer event
-        if let wid = windowID {
-            makeKeyWindow(psn: &psn, windowID: wid)
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        fallbackActivationClient.openApplication(bundleURL, configuration) { error in
+            if let error {
+                logger.error("Fallback activation via NSWorkspace failed for \(bundleIdentifier): \(error.localizedDescription)")
+                DiagnosticLog.log("Fallback activation via NSWorkspace failed for \(bundleIdentifier): \(error.localizedDescription)")
+            }
         }
-
-        // Layer 3: Raise the first window via Accessibility to ensure correct Z-order
-        raiseFirstWindow(from: windows)
-
         return true
     }
 
@@ -258,4 +321,35 @@ final class AppSwitcher: AppSwitching {
         keyDown.postToPid(pid)
         keyUp.postToPid(pid)
     }
+}
+
+extension AppSwitcher.ActivationClient {
+    @MainActor
+    static let live = AppSwitcher.ActivationClient(
+        activateFrontProcess: { pid, windowID in
+            var psn = ProcessSerialNumber()
+            let status = GetProcessForPID(pid, &psn)
+            guard status == noErr else {
+                return .processLookupFailed(status)
+            }
+
+            let result = _SLPSSetFrontProcessWithOptions(&psn, windowID ?? 0, SLPSMode.userGenerated.rawValue)
+            guard result == .success else {
+                return .activationFailed(result)
+            }
+
+            return .success(psn)
+        }
+    )
+}
+
+extension AppSwitcher.FallbackActivationClient {
+    @MainActor
+    static let live = AppSwitcher.FallbackActivationClient(
+        openApplication: { url, configuration, completion in
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { @Sendable _, error in
+                completion(error)
+            }
+        }
+    )
 }
