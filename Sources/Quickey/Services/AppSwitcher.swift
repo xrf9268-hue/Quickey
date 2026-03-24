@@ -4,6 +4,40 @@ import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "AppSwitcher")
 
+struct TogglePostActionState: Equatable, Sendable {
+    let frontmostBundleIdentifier: String?
+    let targetBundleIdentifier: String?
+    let targetFrontmost: Bool
+    let targetHidden: Bool
+    let targetVisibleWindows: Bool
+
+    init(
+        frontmostBundleIdentifier: String?,
+        targetBundleIdentifier: String?,
+        targetFrontmost: Bool,
+        targetHidden: Bool,
+        targetVisibleWindows: Bool
+    ) {
+        self.frontmostBundleIdentifier = frontmostBundleIdentifier
+        self.targetBundleIdentifier = targetBundleIdentifier
+        self.targetFrontmost = targetFrontmost
+        self.targetHidden = targetHidden
+        self.targetVisibleWindows = targetVisibleWindows
+    }
+
+    init(snapshot: ActivationObservationSnapshot) {
+        self.frontmostBundleIdentifier = snapshot.observedFrontmostBundleIdentifier
+        self.targetBundleIdentifier = snapshot.targetBundleIdentifier
+        self.targetFrontmost = snapshot.targetIsObservedFrontmost
+        self.targetHidden = snapshot.targetIsHidden
+        self.targetVisibleWindows = snapshot.targetHasVisibleWindows
+    }
+
+    var logDetails: String {
+        "postFrontmost=\(frontmostBundleIdentifier ?? "nil"), targetBundle=\(targetBundleIdentifier ?? "nil"), targetFrontmost=\(targetFrontmost), targetHidden=\(targetHidden), targetVisibleWindows=\(targetVisibleWindows)"
+    }
+}
+
 @MainActor
 final class AppSwitcher: AppSwitching {
     enum FrontProcessActivationResult {
@@ -26,27 +60,39 @@ final class AppSwitcher: AppSwitching {
     }
 
     private let frontmostTracker: FrontmostApplicationTracker
+    private let applicationObservation: ApplicationObservation
     private let activationClient: ActivationClient
     private let fallbackActivationClient: FallbackActivationClient
 
     init(
         frontmostTracker: FrontmostApplicationTracker = FrontmostApplicationTracker(),
+        applicationObservation: ApplicationObservation = .live,
         activationClient: ActivationClient = .live,
         fallbackActivationClient: FallbackActivationClient = .live
     ) {
         self.frontmostTracker = frontmostTracker
+        self.applicationObservation = applicationObservation
         self.activationClient = activationClient
         self.fallbackActivationClient = fallbackActivationClient
     }
 
     @discardableResult
     func toggleApplication(for shortcut: AppShortcut) -> Bool {
+        let attemptStartedAt = CFAbsoluteTimeGetCurrent()
+
         guard let runningApp = NSRunningApplication.runningApplications(withBundleIdentifier: shortcut.bundleIdentifier).first else {
             // App not running — launch it
             if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: shortcut.bundleIdentifier) {
                 frontmostTracker.noteCurrentFrontmostApp(excluding: shortcut.bundleIdentifier)
                 logger.info("TOGGLE[\(shortcut.appName)]: NOT RUNNING → launching")
                 DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: NOT RUNNING → launching, saved previous=\(frontmostTracker.lastNonTargetBundleIdentifier ?? "nil")")
+                logToggleLifecycle(
+                    for: shortcut,
+                    lifecycle: "TOGGLE_ATTEMPT",
+                    previousBundle: frontmostTracker.lastNonTargetBundleIdentifier,
+                    activationPath: "launch",
+                    elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+                )
                 let bundleId = shortcut.bundleIdentifier
                 let configuration = NSWorkspace.OpenConfiguration()
                 NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { @Sendable app, error in
@@ -65,30 +111,88 @@ final class AppSwitcher: AppSwitching {
         if runningApp.isActive {
             // App is frontmost — hide it and restore the previous app
             let previousApp = frontmostTracker.lastNonTargetBundleIdentifier
-            let restored = frontmostTracker.restorePreviousAppIfPossible()
+            let preActionWindowObservation = applicationObservation.windowObservation(for: runningApp)
+            let preActionSnapshot = applicationObservation.snapshot(
+                for: runningApp,
+                windowObservation: preActionWindowObservation
+            )
+            logToggleLifecycle(
+                for: shortcut,
+                lifecycle: "TOGGLE_RESTORE_ATTEMPT",
+                previousBundle: previousApp,
+                activationPath: "restore_previous",
+                snapshot: preActionSnapshot,
+                elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+            )
+            let restoreAttempt = frontmostTracker.restorePreviousAppIfPossible()
             let hidden = runningApp.hide()
+            let restored = restoreAttempt.restoreAccepted
             logger.info("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored), hidden=\(hidden)")
-            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored) (prev=\(previousApp ?? "nil")), hidden=\(hidden)")
+            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored) (prev=\(restoreAttempt.bundleIdentifier ?? previousApp ?? "nil")), hidden=\(hidden)")
+            let postRestoreWindowObservation = applicationObservation.windowObservation(for: runningApp)
+            let postRestoreSnapshot = applicationObservation.snapshot(
+                for: runningApp,
+                windowObservation: postRestoreWindowObservation
+            )
+            if !postRestoreSnapshot.targetIsObservedFrontmost {
+                frontmostTracker.confirmRestoreAttempt()
+            }
+            logPostActionState(
+                shortcut: shortcut,
+                phase: "POST_RESTORE_STATE",
+                snapshot: postRestoreSnapshot,
+                previousBundle: restoreAttempt.bundleIdentifier ?? previousApp,
+                activationPath: "restore_previous",
+                elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+            )
             return restored || hidden
         }
 
         // App is running but not frontmost — bring it forward.
         frontmostTracker.noteCurrentFrontmostApp(excluding: shortcut.bundleIdentifier)
+        let previousApp = frontmostTracker.lastNonTargetBundleIdentifier
+        let activationPath = runningApp.isHidden ? "unhide_activate" : "activate"
+        let preActionWindowObservation = applicationObservation.windowObservation(for: runningApp)
+        let preActionSnapshot = applicationObservation.snapshot(
+            for: runningApp,
+            windowObservation: preActionWindowObservation
+        )
         logger.info("TOGGLE[\(shortcut.appName)]: RUNNING NOT FRONT → activating, isHidden=\(runningApp.isHidden)")
-        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: RUNNING NOT FRONT → activating, saved previous=\(frontmostTracker.lastNonTargetBundleIdentifier ?? "nil"), isHidden=\(runningApp.isHidden)")
+        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: RUNNING NOT FRONT → activating, saved previous=\(previousApp ?? "nil"), isHidden=\(runningApp.isHidden)")
+        logToggleLifecycle(
+            for: shortcut,
+            lifecycle: "TOGGLE_ATTEMPT",
+            previousBundle: previousApp,
+            activationPath: activationPath,
+            snapshot: preActionSnapshot,
+            elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+        )
         if runningApp.isHidden {
             runningApp.unhide()
         }
-        let windows = fetchWindows(of: runningApp)
+        let windows = preActionWindowObservation.windows
         unminimizeWindows(of: runningApp, windows: windows)
         let activated = activateViaWindowServer(runningApp, windows: windows)
+        let postActivationWindowObservation = applicationObservation.windowObservation(for: runningApp)
+        let postActivationSnapshot = applicationObservation.snapshot(
+            for: runningApp,
+            windowObservation: postActivationWindowObservation
+        )
 
         // If app has no visible windows after activation, try to get one
-        if activated && !hasVisibleWindows(of: runningApp, windows: windows) {
+        if activated && !postActivationWindowObservation.hasVisibleWindows {
             logger.info("TOGGLE[\(shortcut.appName)]: no visible windows after activation")
             DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: no visible windows, attempting recovery")
             recoverWindowlessApp(runningApp, shortcut: shortcut)
         }
+        logPostActionState(
+            shortcut: shortcut,
+            phase: "POST_ACTIVATE_STATE",
+            snapshot: postActivationSnapshot,
+            previousBundle: previousApp,
+            activationPath: activationPath,
+            elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+        )
         return activated
     }
 
@@ -320,6 +424,106 @@ final class AppSwitcher: AppSwitching {
         let pid = app.processIdentifier
         keyDown.postToPid(pid)
         keyUp.postToPid(pid)
+    }
+
+    private func logPostActionState(
+        shortcut: AppShortcut,
+        phase: String,
+        snapshot: ActivationObservationSnapshot,
+        previousBundle: String?,
+        activationPath: String,
+        elapsedMilliseconds: Int
+    ) {
+        let message = postActionLogMessage(for: shortcut, phase: phase, snapshot: snapshot)
+        logger.info("\(message)")
+        DiagnosticLog.log(message)
+
+        if phase == "POST_RESTORE_STATE" {
+            let lifecycle = snapshot.targetIsObservedFrontmost ? "TOGGLE_RESTORE_DEGRADED" : "TOGGLE_RESTORE_CONFIRMED"
+            logToggleLifecycle(
+                for: shortcut,
+                lifecycle: lifecycle,
+                previousBundle: previousBundle,
+                activationPath: activationPath,
+                snapshot: snapshot,
+                elapsedMilliseconds: elapsedMilliseconds
+            )
+            return
+        }
+
+        logToggleLifecycle(
+            for: shortcut,
+            lifecycle: "TOGGLE_CONFIRMATION",
+            previousBundle: previousBundle,
+            activationPath: activationPath,
+            snapshot: snapshot,
+            elapsedMilliseconds: elapsedMilliseconds
+        )
+        logToggleLifecycle(
+            for: shortcut,
+            lifecycle: snapshot.isStableActivation ? "TOGGLE_STABLE" : "TOGGLE_DEGRADED",
+            previousBundle: previousBundle,
+            activationPath: activationPath,
+            snapshot: snapshot,
+            elapsedMilliseconds: elapsedMilliseconds
+        )
+    }
+
+    func postActionLogMessage(
+        for shortcut: AppShortcut,
+        phase: String,
+        snapshot: ActivationObservationSnapshot
+    ) -> String {
+        let state = TogglePostActionState(snapshot: snapshot)
+        return "TOGGLE[\(shortcut.appName)]: \(phase) \(state.logDetails) \(snapshot.structuredLogFields)"
+    }
+
+    func toggleLifecycleLogMessage(
+        for shortcut: AppShortcut,
+        lifecycle: String,
+        previousBundle: String?,
+        activationPath: String,
+        snapshot: ActivationObservationSnapshot? = nil,
+        elapsedMilliseconds: Int
+    ) -> String {
+        var fields = [
+            "target=\(shortcut.bundleIdentifier)",
+            "previous=\(previousBundle ?? "nil")",
+            "activationPath=\(activationPath)",
+            "elapsedMs=\(elapsedMilliseconds)"
+        ]
+
+        if let snapshot {
+            fields.append(snapshot.structuredLogFields)
+        } else {
+            fields.append(ActivationObservationSnapshot.quotedField("frontmost", frontmostTracker.currentFrontmostBundleIdentifier()))
+        }
+
+        return "TOGGLE[\(shortcut.appName)]: \(lifecycle) \(fields.joined(separator: " "))"
+    }
+
+    private func logToggleLifecycle(
+        for shortcut: AppShortcut,
+        lifecycle: String,
+        previousBundle: String?,
+        activationPath: String,
+        snapshot: ActivationObservationSnapshot? = nil,
+        elapsedMilliseconds: Int
+    ) {
+        let message = toggleLifecycleLogMessage(
+            for: shortcut,
+            lifecycle: lifecycle,
+            previousBundle: previousBundle,
+            activationPath: activationPath,
+            snapshot: snapshot,
+            elapsedMilliseconds: elapsedMilliseconds
+        )
+        logger.info("\(message)")
+        DiagnosticLog.log(message)
+    }
+
+    private func elapsedMilliseconds(since startedAt: CFAbsoluteTime) -> Int {
+        Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
     }
 }
 

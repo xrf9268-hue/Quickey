@@ -161,6 +161,37 @@ struct EventTapManagerDeliveryTests {
     }
 
     @Test
+    func disabledTapDiagnosticsIncludeMostRecentShortcutContext() throws {
+        let keyPress = KeyPress(keyCode: CGKeyCode(kVK_ANSI_A), modifiers: [.command])
+        let event = makeKeyEvent(keyPress.keyCode, modifiers: keyPress.modifiers, keyDown: true)
+        let box = EventTapBox()
+        box.registeredShortcuts = [keyPress]
+
+        let diagnostics = LockedValue<EventTapDiagnosticsSnapshot?>(nil)
+        box.onTapDisabled = { snapshot in
+            diagnostics.value = snapshot
+        }
+
+        let keyDownResult = handleEventTapEvent(type: .keyDown, event: event, box: box)
+        #expect(keyDownResult == nil)
+
+        let timeoutResult = handleEventTapEvent(type: .tapDisabledByTimeout, event: event, box: box)
+        #expect(timeoutResult != nil)
+
+        let snapshot = try #require(diagnostics.value)
+        #expect(snapshot.reason == .tapDisabledByTimeout)
+        #expect(snapshot.disableCount == 1)
+        #expect(snapshot.lastEventType == .keyDown)
+        #expect(snapshot.lastKeyCode == keyPress.keyCode)
+        #expect(snapshot.lastModifierFlags == keyPress.modifiers.rawValue)
+        #expect(snapshot.lastShortcutWasSwallowed == true)
+        #expect(snapshot.lastHyperInjected == false)
+        #expect(snapshot.registeredShortcutCount == 1)
+        #expect(snapshot.hyperKeyEnabled == false)
+        #expect(snapshot.hyperKeyHeld == false)
+    }
+
+    @Test
     func hyperKeyPressAndReleaseToggleHeldState() {
         let keyDown = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: true)
         let keyUp = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: false)
@@ -212,6 +243,28 @@ struct EventTapManagerDeliveryTests {
 
 private final class SendableCounter: @unchecked Sendable {
     var value = 0
+}
+
+private final class LockedValue<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: T
+
+    init(_ value: T) {
+        storage = value
+    }
+
+    var value: T {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+        set {
+            lock.lock()
+            storage = newValue
+            lock.unlock()
+        }
+    }
 }
 
 // MARK: - KeyMatcher
