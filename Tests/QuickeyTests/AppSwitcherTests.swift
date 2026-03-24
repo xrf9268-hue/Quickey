@@ -180,6 +180,39 @@ func postActionLogMessageUsesObservationSnapshotForFrontmostState() {
 }
 
 @Test @MainActor
+func postActionLogMessageUsesEffectiveStableOverride() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+    let shortcut = AppShortcut(
+        appName: "Home",
+        bundleIdentifier: "com.apple.Home",
+        keyEquivalent: "h",
+        modifierFlags: ["command"]
+    )
+    let snapshot = ActivationObservationSnapshot(
+        targetBundleIdentifier: "com.apple.Home",
+        observedFrontmostBundleIdentifier: "com.apple.Home",
+        targetIsActive: true,
+        targetIsHidden: false,
+        visibleWindowCount: 0,
+        hasFocusedWindow: false,
+        hasMainWindow: false,
+        windowObservationSucceeded: true,
+        windowObservationFailureReason: nil,
+        classification: .windowlessOrAccessory,
+        classificationReason: "no visible windows"
+    )
+
+    let message = switcher.postActionLogMessage(
+        for: shortcut,
+        phase: "POST_ACTIVATE_STATE",
+        snapshot: snapshot,
+        effectiveStable: false
+    )
+
+    #expect(message.contains("stable=false"))
+}
+
+@Test @MainActor
 func toggleLifecycleLogMessageIncludesStructuredObservationFields() {
     let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
     let shortcut = AppShortcut(
@@ -218,6 +251,191 @@ func toggleLifecycleLogMessageIncludesStructuredObservationFields() {
     #expect(message.contains("classification=\"regularWindowed\""))
 }
 
+@Test @MainActor
+func secondTriggerDuringPendingActivationDoesNotToggleOff() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+
+    let first = switcher.acceptPendingActivation(
+        for: "com.apple.Safari",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 10
+    )
+
+    #expect(switcher.shouldToggleOff(bundleIdentifier: "com.apple.Safari", runningAppIsActive: true) == false)
+
+    let second = switcher.acceptPendingActivation(
+        for: "com.apple.Safari",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 11
+    )
+
+    #expect(first.generation == 1)
+    #expect(second.generation == 2)
+    #expect(switcher.pendingActivationState == second)
+    #expect(switcher.stableActivationState == nil)
+}
+
+@Test @MainActor
+func staleConfirmationGenerationCannotPromoteState() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+    let first = switcher.acceptPendingActivation(
+        for: "com.apple.Safari",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 20
+    )
+    let second = switcher.acceptPendingActivation(
+        for: "com.apple.Safari",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 21
+    )
+    let stableSnapshot = ActivationObservationSnapshot(
+        targetBundleIdentifier: "com.apple.Safari",
+        observedFrontmostBundleIdentifier: "com.apple.Safari",
+        targetIsActive: true,
+        targetIsHidden: false,
+        visibleWindowCount: 1,
+        hasFocusedWindow: true,
+        hasMainWindow: true,
+        windowObservationSucceeded: true,
+        windowObservationFailureReason: nil,
+        classification: .regularWindowed,
+        classificationReason: "visible focused main window"
+    )
+
+    let promoted = switcher.promotePendingActivationIfCurrent(
+        bundleIdentifier: "com.apple.Safari",
+        generation: first.generation,
+        snapshot: stableSnapshot
+    )
+
+    #expect(promoted == false)
+    #expect(switcher.pendingActivationState == second)
+    #expect(switcher.stableActivationState == nil)
+}
+
+@Test @MainActor
+func confirmationWithoutVisibleWindowEvidenceDoesNotPromoteStable() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+    let pending = switcher.acceptPendingActivation(
+        for: "com.apple.Home",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 25
+    )
+    let windowlessSnapshot = ActivationObservationSnapshot(
+        targetBundleIdentifier: "com.apple.Home",
+        observedFrontmostBundleIdentifier: "com.apple.Home",
+        targetIsActive: true,
+        targetIsHidden: false,
+        visibleWindowCount: 0,
+        hasFocusedWindow: false,
+        hasMainWindow: false,
+        windowObservationSucceeded: true,
+        windowObservationFailureReason: nil,
+        classification: .windowlessOrAccessory,
+        classificationReason: "no visible windows"
+    )
+
+    let promoted = switcher.promotePendingActivationIfCurrent(
+        bundleIdentifier: "com.apple.Home",
+        generation: pending.generation,
+        snapshot: windowlessSnapshot
+    )
+
+    #expect(promoted == false)
+    #expect(switcher.pendingActivationState == pending)
+    #expect(switcher.stableActivationState == nil)
+}
+
+@Test @MainActor
+func acceptedTriggerStillReturnsTrueWhileConfirmationIsPending() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+
+    let accepted = switcher.recordAcceptedTrigger(
+        bundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 30
+    )
+
+    #expect(accepted == true)
+    #expect(switcher.pendingActivationState?.bundleIdentifier == "com.apple.Safari")
+    #expect(switcher.stableActivationState == nil)
+}
+
+@Test @MainActor
+func recoverWindowlessAppStageCompletionHappensBeforeNextConfirmation() {
+    let scheduler = ManualConfirmationScheduler()
+    let switcher = AppSwitcher(
+        frontmostTracker: makeTrackerForAppSwitcherTests(),
+        confirmationClient: .init(
+            now: { 40 },
+            schedule: { delay, operation in
+                scheduler.schedule(after: delay, operation)
+            }
+        )
+    )
+    let state = switcher.acceptPendingActivation(
+        for: "com.apple.Home",
+        previousBundleIdentifier: "com.openai.codex",
+        startedAt: 40
+    )
+    let shortcut = AppShortcut(
+        appName: "Home",
+        bundleIdentifier: "com.apple.Home",
+        keyEquivalent: "h",
+        modifierFlags: ["command"]
+    )
+    var snapshots = [
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "com.apple.Home",
+            observedFrontmostBundleIdentifier: "com.apple.Home",
+            targetIsActive: true,
+            targetIsHidden: false,
+            visibleWindowCount: 0,
+            hasFocusedWindow: false,
+            hasMainWindow: false,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .nonStandardWindowed,
+            classificationReason: "no visible windows yet"
+        ),
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "com.apple.Home",
+            observedFrontmostBundleIdentifier: "com.apple.Home",
+            targetIsActive: true,
+            targetIsHidden: false,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .nonStandardWindowed,
+            classificationReason: "window appeared after staged recovery"
+        )
+    ]
+    var events: [String] = []
+
+    switcher.schedulePendingConfirmation(
+        state: state,
+        shortcut: shortcut,
+        activationPath: "activate",
+        observe: {
+            let snapshot = snapshots.removeFirst()
+            events.append("confirm:\(snapshot.visibleWindowCount)")
+            return snapshot
+        },
+        recoverIfNeeded: { stage, completion in
+            events.append("recover:\(stage.rawValue)")
+            completion()
+        }
+    )
+
+    scheduler.runNext()
+    scheduler.runNext()
+
+    #expect(events == ["confirm:0", "recover:axRaise", "confirm:1"])
+    #expect(switcher.stableActivationState?.bundleIdentifier == "com.apple.Home")
+}
+
 @MainActor
 private func makeTrackerForAppSwitcherTests() -> FrontmostApplicationTracker {
     FrontmostApplicationTracker(client: .init(
@@ -231,4 +449,22 @@ private func makeTrackerForAppSwitcherTests() -> FrontmostApplicationTracker {
 private final class FallbackActivationRecorder: @unchecked Sendable {
     var openedURLs: [URL] = []
     var activatesFlags: [Bool] = []
+}
+
+@MainActor
+private final class ManualConfirmationScheduler {
+    private var operations: [@MainActor () -> Void] = []
+
+    func schedule(after _: TimeInterval, _ operation: @escaping @MainActor () -> Void) {
+        operations.append(operation)
+    }
+
+    func runNext() {
+        guard !operations.isEmpty else {
+            Issue.record("Expected a scheduled confirmation operation")
+            return
+        }
+        let operation = operations.removeFirst()
+        operation()
+    }
 }

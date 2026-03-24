@@ -44,6 +44,10 @@ struct ActivationObservationSnapshot: Sendable, Equatable {
     }
 
     var structuredLogFields: String {
+        structuredLogFields(stableOverride: nil)
+    }
+
+    func structuredLogFields(stableOverride: Bool?) -> String {
         [
             Self.quotedField("frontmost", observedFrontmostBundleIdentifier),
             Self.quotedField("target", targetBundleIdentifier),
@@ -56,7 +60,7 @@ struct ActivationObservationSnapshot: Sendable, Equatable {
             Self.quotedField("windowObservationFailureReason", windowObservationFailureReason),
             Self.quotedField("classification", classification.rawValue),
             Self.quotedField("classificationReason", classificationReason),
-            "stable=\(isStableActivation)"
+            "stable=\(stableOverride ?? isStableActivation)"
         ].joined(separator: " ")
     }
 

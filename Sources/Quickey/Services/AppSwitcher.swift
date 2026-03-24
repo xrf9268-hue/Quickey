@@ -40,6 +40,49 @@ struct TogglePostActionState: Equatable, Sendable {
 
 @MainActor
 final class AppSwitcher: AppSwitching {
+    struct PendingActivationState: Equatable, Sendable {
+        let bundleIdentifier: String
+        let previousBundleIdentifier: String?
+        let generation: Int
+        let startedAt: CFAbsoluteTime
+    }
+
+    struct StableActivationState: Equatable, Sendable {
+        let bundleIdentifier: String
+        let previousBundleIdentifier: String?
+        let generation: Int
+        let startedAt: CFAbsoluteTime
+        let confirmedAt: CFAbsoluteTime
+    }
+
+    enum WindowRecoveryStage: String, Sendable {
+        case axRaise
+        case reopen
+        case commandN
+
+        var nextStage: Self? {
+            switch self {
+            case .axRaise:
+                .reopen
+            case .reopen:
+                .commandN
+            case .commandN:
+                nil
+            }
+        }
+
+        var settlingDelay: TimeInterval {
+            switch self {
+            case .axRaise:
+                0.05
+            case .reopen:
+                0.1
+            case .commandN:
+                0.05
+            }
+        }
+    }
+
     enum FrontProcessActivationResult {
         case success(ProcessSerialNumber)
         case processLookupFailed(OSStatus)
@@ -59,26 +102,203 @@ final class AppSwitcher: AppSwitching {
         let openApplication: (URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (Error?) -> Void) -> Void
     }
 
+    struct ConfirmationClient {
+        let now: @MainActor () -> CFAbsoluteTime
+        let schedule: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void
+    }
+
     private let frontmostTracker: FrontmostApplicationTracker
     private let applicationObservation: ApplicationObservation
     private let activationClient: ActivationClient
     private let fallbackActivationClient: FallbackActivationClient
+    private let confirmationClient: ConfirmationClient
+    private var nextPendingGeneration = 0
+    private(set) var pendingActivationState: PendingActivationState?
+    private(set) var stableActivationState: StableActivationState?
 
     init(
         frontmostTracker: FrontmostApplicationTracker = FrontmostApplicationTracker(),
         applicationObservation: ApplicationObservation = .live,
         activationClient: ActivationClient = .live,
-        fallbackActivationClient: FallbackActivationClient = .live
+        fallbackActivationClient: FallbackActivationClient = .live,
+        confirmationClient: ConfirmationClient = .live
     ) {
         self.frontmostTracker = frontmostTracker
         self.applicationObservation = applicationObservation
         self.activationClient = activationClient
         self.fallbackActivationClient = fallbackActivationClient
+        self.confirmationClient = confirmationClient
+    }
+
+    @discardableResult
+    func acceptPendingActivation(
+        for bundleIdentifier: String,
+        previousBundleIdentifier: String?,
+        startedAt: CFAbsoluteTime
+    ) -> PendingActivationState {
+        nextPendingGeneration += 1
+        let state = PendingActivationState(
+            bundleIdentifier: bundleIdentifier,
+            previousBundleIdentifier: previousBundleIdentifier,
+            generation: nextPendingGeneration,
+            startedAt: startedAt
+        )
+        pendingActivationState = state
+        if stableActivationState?.bundleIdentifier == bundleIdentifier {
+            stableActivationState = nil
+        }
+        return state
+    }
+
+    @discardableResult
+    func recordAcceptedTrigger(
+        bundleIdentifier: String,
+        previousBundleIdentifier: String?,
+        startedAt: CFAbsoluteTime
+    ) -> Bool {
+        _ = acceptPendingActivation(
+            for: bundleIdentifier,
+            previousBundleIdentifier: previousBundleIdentifier,
+            startedAt: startedAt
+        )
+        return true
+    }
+
+    func shouldToggleOff(bundleIdentifier: String, runningAppIsActive: Bool) -> Bool {
+        guard runningAppIsActive else {
+            return false
+        }
+        guard let stableActivationState, stableActivationState.bundleIdentifier == bundleIdentifier else {
+            return false
+        }
+        guard pendingActivationState?.bundleIdentifier != bundleIdentifier else {
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    func promotePendingActivationIfCurrent(
+        bundleIdentifier: String,
+        generation: Int,
+        snapshot: ActivationObservationSnapshot
+    ) -> Bool {
+        guard let pendingActivationState,
+              pendingActivationState.bundleIdentifier == bundleIdentifier,
+              pendingActivationState.generation == generation,
+              canPromoteToStable(with: snapshot) else {
+            return false
+        }
+
+        stableActivationState = StableActivationState(
+            bundleIdentifier: bundleIdentifier,
+            previousBundleIdentifier: pendingActivationState.previousBundleIdentifier,
+            generation: generation,
+            startedAt: pendingActivationState.startedAt,
+            confirmedAt: confirmationClient.now()
+        )
+        self.pendingActivationState = nil
+        return true
+    }
+
+    func schedulePendingConfirmation(
+        state: PendingActivationState,
+        shortcut: AppShortcut,
+        activationPath: String,
+        observe: @escaping @MainActor () -> ActivationObservationSnapshot,
+        recoverIfNeeded: @escaping @MainActor (WindowRecoveryStage, @escaping @MainActor () -> Void) -> Void
+    ) {
+        schedulePendingConfirmation(
+            state: state,
+            shortcut: shortcut,
+            activationPath: activationPath,
+            delay: 0.075,
+            nextRecoveryStage: .axRaise,
+            observe: observe,
+            recoverIfNeeded: recoverIfNeeded
+        )
+    }
+
+    private func schedulePendingConfirmation(
+        state: PendingActivationState,
+        shortcut: AppShortcut,
+        activationPath: String,
+        delay: TimeInterval,
+        nextRecoveryStage: WindowRecoveryStage?,
+        observe: @escaping @MainActor () -> ActivationObservationSnapshot,
+        recoverIfNeeded: @escaping @MainActor (WindowRecoveryStage, @escaping @MainActor () -> Void) -> Void
+    ) {
+        confirmationClient.schedule(delay) { [weak self] in
+            guard let self,
+                  let pendingActivationState = self.pendingActivationState,
+                  pendingActivationState.bundleIdentifier == state.bundleIdentifier,
+                  pendingActivationState.generation == state.generation else {
+                return
+            }
+
+            let snapshot = observe()
+            let effectiveStable = self.canPromoteToStable(with: snapshot)
+            self.logPostActionState(
+                shortcut: shortcut,
+                phase: "POST_ACTIVATE_STATE",
+                snapshot: snapshot,
+                previousBundle: pendingActivationState.previousBundleIdentifier,
+                activationPath: activationPath,
+                elapsedMilliseconds: self.elapsedMilliseconds(since: pendingActivationState.startedAt),
+                effectiveStable: effectiveStable
+            )
+
+            if self.promotePendingActivationIfCurrent(
+                bundleIdentifier: state.bundleIdentifier,
+                generation: state.generation,
+                snapshot: snapshot
+            ) {
+                return
+            }
+
+            guard self.shouldAttemptRecovery(for: snapshot), let nextRecoveryStage else {
+                self.clearActivationTracking(for: state.bundleIdentifier, resetPreviousTracking: true)
+                return
+            }
+
+            recoverIfNeeded(nextRecoveryStage) { [weak self] in
+                guard let self else { return }
+                self.schedulePendingConfirmation(
+                    state: state,
+                    shortcut: shortcut,
+                    activationPath: activationPath,
+                    delay: nextRecoveryStage.settlingDelay,
+                    nextRecoveryStage: nextRecoveryStage.nextStage,
+                    observe: observe,
+                    recoverIfNeeded: recoverIfNeeded
+                )
+            }
+        }
+    }
+
+    private func shouldAttemptRecovery(for snapshot: ActivationObservationSnapshot) -> Bool {
+        !snapshot.targetHasVisibleWindows
+    }
+
+    private func canPromoteToStable(with snapshot: ActivationObservationSnapshot) -> Bool {
+        snapshot.isStableActivation && !shouldAttemptRecovery(for: snapshot)
+    }
+
+    private func clearActivationTracking(for bundleIdentifier: String, resetPreviousTracking: Bool) {
+        if pendingActivationState?.bundleIdentifier == bundleIdentifier {
+            pendingActivationState = nil
+        }
+        if stableActivationState?.bundleIdentifier == bundleIdentifier {
+            stableActivationState = nil
+        }
+        if resetPreviousTracking {
+            frontmostTracker.resetPreviousAppTracking()
+        }
     }
 
     @discardableResult
     func toggleApplication(for shortcut: AppShortcut) -> Bool {
-        let attemptStartedAt = CFAbsoluteTimeGetCurrent()
+        let attemptStartedAt = confirmationClient.now()
 
         guard let runningApp = NSRunningApplication.runningApplications(withBundleIdentifier: shortcut.bundleIdentifier).first else {
             // App not running — launch it
@@ -108,14 +328,20 @@ final class AppSwitcher: AppSwitching {
             return false
         }
 
-        if runningApp.isActive {
-            // App is frontmost — hide it and restore the previous app
-            let previousApp = frontmostTracker.lastNonTargetBundleIdentifier
-            let preActionWindowObservation = applicationObservation.windowObservation(for: runningApp)
-            let preActionSnapshot = applicationObservation.snapshot(
-                for: runningApp,
-                windowObservation: preActionWindowObservation
-            )
+        let preActionWindowObservation = applicationObservation.windowObservation(for: runningApp)
+        let preActionSnapshot = applicationObservation.snapshot(
+            for: runningApp,
+            windowObservation: preActionWindowObservation
+        )
+
+        if stableActivationState?.bundleIdentifier == shortcut.bundleIdentifier, !preActionSnapshot.isStableActivation {
+            stableActivationState = nil
+        }
+
+        if shouldToggleOff(bundleIdentifier: shortcut.bundleIdentifier, runningAppIsActive: runningApp.isActive),
+           preActionSnapshot.isStableActivation {
+            // App is stably frontmost — hide it and restore the previous app
+            let previousApp = stableActivationState?.previousBundleIdentifier ?? frontmostTracker.lastNonTargetBundleIdentifier
             logToggleLifecycle(
                 for: shortcut,
                 lifecycle: "TOGGLE_RESTORE_ATTEMPT",
@@ -137,6 +363,7 @@ final class AppSwitcher: AppSwitching {
             if !postRestoreSnapshot.targetIsObservedFrontmost {
                 frontmostTracker.confirmRestoreAttempt()
             }
+            clearActivationTracking(for: shortcut.bundleIdentifier, resetPreviousTracking: false)
             logPostActionState(
                 shortcut: shortcut,
                 phase: "POST_RESTORE_STATE",
@@ -148,15 +375,23 @@ final class AppSwitcher: AppSwitching {
             return restored || hidden
         }
 
-        // App is running but not frontmost — bring it forward.
-        frontmostTracker.noteCurrentFrontmostApp(excluding: shortcut.bundleIdentifier)
-        let previousApp = frontmostTracker.lastNonTargetBundleIdentifier
+        if let pendingActivationState, pendingActivationState.bundleIdentifier != shortcut.bundleIdentifier {
+            clearActivationTracking(for: pendingActivationState.bundleIdentifier, resetPreviousTracking: true)
+        } else if let stableActivationState, stableActivationState.bundleIdentifier != shortcut.bundleIdentifier {
+            clearActivationTracking(for: stableActivationState.bundleIdentifier, resetPreviousTracking: true)
+        }
+
+        let continuingPendingActivation = pendingActivationState?.bundleIdentifier == shortcut.bundleIdentifier
+        if !continuingPendingActivation {
+            frontmostTracker.noteCurrentFrontmostApp(excluding: shortcut.bundleIdentifier)
+        }
+        let previousApp = continuingPendingActivation
+            ? pendingActivationState?.previousBundleIdentifier
+            : frontmostTracker.lastNonTargetBundleIdentifier
+        let pendingStartedAt = continuingPendingActivation
+            ? pendingActivationState?.startedAt ?? attemptStartedAt
+            : attemptStartedAt
         let activationPath = runningApp.isHidden ? "unhide_activate" : "activate"
-        let preActionWindowObservation = applicationObservation.windowObservation(for: runningApp)
-        let preActionSnapshot = applicationObservation.snapshot(
-            for: runningApp,
-            windowObservation: preActionWindowObservation
-        )
         logger.info("TOGGLE[\(shortcut.appName)]: RUNNING NOT FRONT → activating, isHidden=\(runningApp.isHidden)")
         DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: RUNNING NOT FRONT → activating, saved previous=\(previousApp ?? "nil"), isHidden=\(runningApp.isHidden)")
         logToggleLifecycle(
@@ -173,27 +408,52 @@ final class AppSwitcher: AppSwitching {
         let windows = preActionWindowObservation.windows
         unminimizeWindows(of: runningApp, windows: windows)
         let activated = activateViaWindowServer(runningApp, windows: windows)
-        let postActivationWindowObservation = applicationObservation.windowObservation(for: runningApp)
-        let postActivationSnapshot = applicationObservation.snapshot(
-            for: runningApp,
-            windowObservation: postActivationWindowObservation
-        )
-
-        // If app has no visible windows after activation, try to get one
-        if activated && !postActivationWindowObservation.hasVisibleWindows {
-            logger.info("TOGGLE[\(shortcut.appName)]: no visible windows after activation")
-            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: no visible windows, attempting recovery")
-            recoverWindowlessApp(runningApp, shortcut: shortcut)
+        guard activated || continuingPendingActivation else {
+            clearActivationTracking(for: shortcut.bundleIdentifier, resetPreviousTracking: true)
+            return false
         }
-        logPostActionState(
-            shortcut: shortcut,
-            phase: "POST_ACTIVATE_STATE",
-            snapshot: postActivationSnapshot,
-            previousBundle: previousApp,
-            activationPath: activationPath,
-            elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+
+        let pendingState = acceptPendingActivation(
+            for: shortcut.bundleIdentifier,
+            previousBundleIdentifier: previousApp,
+            startedAt: pendingStartedAt
         )
-        return activated
+        schedulePendingConfirmation(
+            state: pendingState,
+            shortcut: shortcut,
+            activationPath: activationPath,
+            observe: { [weak self] in
+                guard let self else {
+                    return ActivationObservationSnapshot(
+                        targetBundleIdentifier: runningApp.bundleIdentifier,
+                        observedFrontmostBundleIdentifier: nil,
+                        targetIsActive: false,
+                        targetIsHidden: true,
+                        visibleWindowCount: 0,
+                        hasFocusedWindow: false,
+                        hasMainWindow: false,
+                        windowObservationSucceeded: false,
+                        windowObservationFailureReason: "appSwitcherReleased",
+                        classification: .windowlessOrAccessory,
+                        classificationReason: "app switcher released during confirmation"
+                    )
+                }
+                let confirmationWindowObservation = self.applicationObservation.windowObservation(for: runningApp)
+                return self.applicationObservation.snapshot(
+                    for: runningApp,
+                    windowObservation: confirmationWindowObservation
+                )
+            },
+            recoverIfNeeded: { [weak self] stage, completion in
+                self?.recoverWindowlessApp(
+                    runningApp,
+                    shortcut: shortcut,
+                    stage: stage,
+                    completion: completion
+                )
+            }
+        )
+        return true
     }
 
     // MARK: - Three-layer activation (reference: alt-tab-macos)
@@ -316,51 +576,46 @@ final class AppSwitcher: AppSwitching {
     /// 1. AX kAXRaiseAction on the app element — some apps auto-recover
     /// 2. NSWorkspace.shared.open(url) — like clicking Dock icon
     /// 3. ⌘N fallback — last resort
-    private func recoverWindowlessApp(_ app: NSRunningApplication, shortcut: AppShortcut) {
-        let pid = app.processIdentifier
-
-        // Strategy 1: Raise the app element itself
-        let axApp = AXUIElementCreateApplication(pid)
-        AXUIElementPerformAction(axApp, kAXRaiseAction as CFString)
-
-        // Check after a short delay if a window appeared
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self else { return }
-            if self.hasVisibleWindows(of: app, windows: self.fetchWindows(of: app)) {
-                logger.info("TOGGLE[\(shortcut.appName)]: window recovered via AX raise")
-                DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovered via AX raise")
+    private func recoverWindowlessApp(
+        _ app: NSRunningApplication,
+        shortcut: AppShortcut,
+        stage: WindowRecoveryStage,
+        completion: @escaping @MainActor () -> Void
+    ) {
+        switch stage {
+        case .axRaise:
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementPerformAction(axApp, kAXRaiseAction as CFString)
+            logger.info("TOGGLE[\(shortcut.appName)]: window recovery stage=axRaise")
+            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovery stage=axRaise")
+            completion()
+        case .reopen:
+            guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: shortcut.bundleIdentifier) else {
+                logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
+                DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
+                recoverWindowlessApp(app, shortcut: shortcut, stage: .commandN, completion: completion)
                 return
             }
 
-            // Strategy 2: Re-open via NSWorkspace (like Dock click)
-            if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: shortcut.bundleIdentifier) {
-                let config = NSWorkspace.OpenConfiguration()
-                NSWorkspace.shared.openApplication(at: appURL, configuration: config) { @Sendable _, error in
-                    if let error {
-                        logger.error("TOGGLE[\(shortcut.appName)]: NSWorkspace.open failed: \(error.localizedDescription)")
-                    }
+            let config = NSWorkspace.OpenConfiguration()
+            fallbackActivationClient.openApplication(appURL, config) { @Sendable error in
+                if let error {
+                    logger.error("TOGGLE[\(shortcut.appName)]: NSWorkspace.open failed: \(error.localizedDescription)")
+                    DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: NSWorkspace.open failed: \(error.localizedDescription)")
+                } else {
+                    logger.info("TOGGLE[\(shortcut.appName)]: window recovery stage=reopen")
+                    DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovery stage=reopen")
                 }
 
-                // Check after another delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                    guard let self else { return }
-                    if self.hasVisibleWindows(of: app, windows: self.fetchWindows(of: app)) {
-                        logger.info("TOGGLE[\(shortcut.appName)]: window recovered via NSWorkspace.open")
-                        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: window recovered via NSWorkspace.open")
-                        return
-                    }
-
-                    // Strategy 3: Send ⌘N as last resort
-                    logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
-                    DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
-                    self.openNewWindow(of: app)
+                Task { @MainActor in
+                    completion()
                 }
-            } else {
-                // No app URL — go straight to ⌘N
-                logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
-                DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N (no app URL)")
-                self.openNewWindow(of: app)
             }
+        case .commandN:
+            logger.info("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
+            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: sending ⌘N as fallback")
+            openNewWindow(of: app)
+            completion()
         }
     }
 
@@ -432,9 +687,15 @@ final class AppSwitcher: AppSwitching {
         snapshot: ActivationObservationSnapshot,
         previousBundle: String?,
         activationPath: String,
-        elapsedMilliseconds: Int
+        elapsedMilliseconds: Int,
+        effectiveStable: Bool? = nil
     ) {
-        let message = postActionLogMessage(for: shortcut, phase: phase, snapshot: snapshot)
+        let message = postActionLogMessage(
+            for: shortcut,
+            phase: phase,
+            snapshot: snapshot,
+            effectiveStable: effectiveStable
+        )
         logger.info("\(message)")
         DiagnosticLog.log(message)
 
@@ -457,25 +718,28 @@ final class AppSwitcher: AppSwitching {
             previousBundle: previousBundle,
             activationPath: activationPath,
             snapshot: snapshot,
-            elapsedMilliseconds: elapsedMilliseconds
+            elapsedMilliseconds: elapsedMilliseconds,
+            effectiveStable: effectiveStable
         )
         logToggleLifecycle(
             for: shortcut,
-            lifecycle: snapshot.isStableActivation ? "TOGGLE_STABLE" : "TOGGLE_DEGRADED",
+            lifecycle: (effectiveStable ?? snapshot.isStableActivation) ? "TOGGLE_STABLE" : "TOGGLE_DEGRADED",
             previousBundle: previousBundle,
             activationPath: activationPath,
             snapshot: snapshot,
-            elapsedMilliseconds: elapsedMilliseconds
+            elapsedMilliseconds: elapsedMilliseconds,
+            effectiveStable: effectiveStable
         )
     }
 
     func postActionLogMessage(
         for shortcut: AppShortcut,
         phase: String,
-        snapshot: ActivationObservationSnapshot
+        snapshot: ActivationObservationSnapshot,
+        effectiveStable: Bool? = nil
     ) -> String {
         let state = TogglePostActionState(snapshot: snapshot)
-        return "TOGGLE[\(shortcut.appName)]: \(phase) \(state.logDetails) \(snapshot.structuredLogFields)"
+        return "TOGGLE[\(shortcut.appName)]: \(phase) \(state.logDetails) \(snapshot.structuredLogFields(stableOverride: effectiveStable))"
     }
 
     func toggleLifecycleLogMessage(
@@ -484,7 +748,8 @@ final class AppSwitcher: AppSwitching {
         previousBundle: String?,
         activationPath: String,
         snapshot: ActivationObservationSnapshot? = nil,
-        elapsedMilliseconds: Int
+        elapsedMilliseconds: Int,
+        effectiveStable: Bool? = nil
     ) -> String {
         var fields = [
             "target=\(shortcut.bundleIdentifier)",
@@ -494,7 +759,7 @@ final class AppSwitcher: AppSwitching {
         ]
 
         if let snapshot {
-            fields.append(snapshot.structuredLogFields)
+            fields.append(snapshot.structuredLogFields(stableOverride: effectiveStable))
         } else {
             fields.append(ActivationObservationSnapshot.quotedField("frontmost", frontmostTracker.currentFrontmostBundleIdentifier()))
         }
@@ -508,7 +773,8 @@ final class AppSwitcher: AppSwitching {
         previousBundle: String?,
         activationPath: String,
         snapshot: ActivationObservationSnapshot? = nil,
-        elapsedMilliseconds: Int
+        elapsedMilliseconds: Int,
+        effectiveStable: Bool? = nil
     ) {
         let message = toggleLifecycleLogMessage(
             for: shortcut,
@@ -516,14 +782,15 @@ final class AppSwitcher: AppSwitching {
             previousBundle: previousBundle,
             activationPath: activationPath,
             snapshot: snapshot,
-            elapsedMilliseconds: elapsedMilliseconds
+            elapsedMilliseconds: elapsedMilliseconds,
+            effectiveStable: effectiveStable
         )
         logger.info("\(message)")
         DiagnosticLog.log(message)
     }
 
     private func elapsedMilliseconds(since startedAt: CFAbsoluteTime) -> Int {
-        Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
+        Int((confirmationClient.now() - startedAt) * 1000)
     }
 }
 
@@ -553,6 +820,22 @@ extension AppSwitcher.FallbackActivationClient {
         openApplication: { url, configuration, completion in
             NSWorkspace.shared.openApplication(at: url, configuration: configuration) { @Sendable _, error in
                 completion(error)
+            }
+        }
+    )
+}
+
+extension AppSwitcher.ConfirmationClient {
+    @MainActor
+    static let live = AppSwitcher.ConfirmationClient(
+        now: {
+            CFAbsoluteTimeGetCurrent()
+        },
+        schedule: { delay, operation in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Task { @MainActor in
+                    operation()
+                }
             }
         }
     )
