@@ -5,6 +5,25 @@ import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "EventTapManager")
 
+struct EventTapDiagnosticsSnapshot: Equatable, Sendable {
+    let reason: CGEventType
+    let disableCount: Int
+    let lastEventType: CGEventType?
+    let lastKeyCode: CGKeyCode?
+    let lastModifierFlags: UInt
+    let lastShortcutWasSwallowed: Bool
+    let lastHyperInjected: Bool
+    let registeredShortcutCount: Int
+    let hyperKeyEnabled: Bool
+    let hyperKeyHeld: Bool
+
+    var logMessage: String {
+        let lastEvent = lastEventType.map { String($0.rawValue) } ?? "nil"
+        let lastKey = lastKeyCode.map { String($0) } ?? "nil"
+        return "EVENT TAP DIAGNOSTICS: reason=\(reason.rawValue), disableCount=\(disableCount), lastEvent=\(lastEvent), lastKeyCode=\(lastKey), lastModifiers=\(lastModifierFlags), lastShortcutWasSwallowed=\(lastShortcutWasSwallowed), lastHyperInjected=\(lastHyperInjected), registeredShortcutCount=\(registeredShortcutCount), hyperKeyEnabled=\(hyperKeyEnabled), hyperKeyHeld=\(hyperKeyHeld)"
+    }
+}
+
 enum MatchedShortcutDelivery {
     static func makeHandler(
         _ handler: @escaping @MainActor @Sendable (KeyPress) -> Void
@@ -25,8 +44,9 @@ func handleEventTapEvent(
 ) -> Unmanaged<CGEvent>? {
     switch type {
     case .tapDisabledByTimeout, .tapDisabledByUserInput:
-        logger.warning("EVENT TAP DISABLED by system (reason: \(type.rawValue)), re-enabling")
-        DiagnosticLog.log("EVENT TAP DISABLED by system (reason: \(type.rawValue)), re-enabling")
+        let snapshot = box.captureDisableSnapshot(reason: type)
+        logger.warning("EVENT TAP DISABLED by system (reason: \(type.rawValue), count: \(snapshot.disableCount)), re-enabling")
+        box.onTapDisabled?(snapshot)
         if let reenableTap = box.reenableTap {
             reenableTap()
         } else if let tap = box.tap {
@@ -61,6 +81,14 @@ func handleEventTapEvent(
         }
 
         if swallow && keyCode == HyperKeyService.f19KeyCode {
+            let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+            box.recordObservedEvent(
+                type: .keyDown,
+                keyCode: keyCode,
+                modifierFlags: modifierFlags.intersection(.deviceIndependentFlagsMask),
+                swallowed: true,
+                injectedHyper: false
+            )
             return nil
         }
 
@@ -72,6 +100,13 @@ func handleEventTapEvent(
         let keyPress = KeyPress(
             keyCode: keyCode,
             modifiers: flags.intersection(.deviceIndependentFlagsMask)
+        )
+        box.recordObservedEvent(
+            type: .keyDown,
+            keyCode: keyCode,
+            modifierFlags: keyPress.modifiers,
+            swallowed: swallow,
+            injectedHyper: injectHyper
         )
 
         if swallow {
@@ -89,9 +124,25 @@ func handleEventTapEvent(
             }
             return false
         }
+        let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+        box.recordObservedEvent(
+            type: .keyUp,
+            keyCode: keyCode,
+            modifierFlags: modifierFlags.intersection(.deviceIndependentFlagsMask),
+            swallowed: swallowUp,
+            injectedHyper: false
+        )
         return swallowUp ? nil : Unmanaged.passUnretained(event)
 
     case .flagsChanged:
+        let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+        box.recordObservedEvent(
+            type: .flagsChanged,
+            keyCode: nil,
+            modifierFlags: modifierFlags.intersection(.deviceIndependentFlagsMask),
+            swallowed: false,
+            injectedHyper: false
+        )
         return Unmanaged.passUnretained(event)
 
     default:
@@ -143,6 +194,11 @@ final class EventTapManager: EventTapManaging {
         let box = EventTapBox()
         box.onKeyPress = MatchedShortcutDelivery.makeHandler { [weak self] keyPress in
             self?.handleAsync(keyPress)
+        }
+        box.onTapDisabled = { snapshot in
+            DispatchQueue.global(qos: .utility).async {
+                DiagnosticLog.log(snapshot.logMessage)
+            }
         }
         box.registeredShortcuts = registeredKeyPresses
         let retained = Unmanaged.passRetained(box)
@@ -304,6 +360,8 @@ final class EventTapBox {
     var reenableTap: (@Sendable () -> Void)?
     /// Background-safe closure that hops to the main actor before invoking app logic.
     var onKeyPress: (@Sendable (KeyPress) -> Void)?
+    /// Background-safe closure for asynchronous timeout diagnostics.
+    var onTapDisabled: (@Sendable (EventTapDiagnosticsSnapshot) -> Void)?
 
     // MARK: - Lock-protected shared state
 
@@ -313,6 +371,12 @@ final class EventTapBox {
     fileprivate var _registeredShortcuts: Set<KeyPress> = []
     fileprivate var _hyperKeyEnabled: Bool = false
     fileprivate var _isHyperHeld: Bool = false
+    fileprivate var _disableCount: Int = 0
+    fileprivate var _lastEventType: CGEventType?
+    fileprivate var _lastKeyCode: CGKeyCode?
+    fileprivate var _lastModifierFlags: UInt = 0
+    fileprivate var _lastShortcutWasSwallowed: Bool = false
+    fileprivate var _lastHyperInjected: Bool = false
 
     var registeredShortcuts: Set<KeyPress> {
         get { withLock { _registeredShortcuts } }
@@ -332,6 +396,40 @@ final class EventTapBox {
         withLock {
             _hyperKeyEnabled = enabled
             if !enabled { _isHyperHeld = false }
+        }
+    }
+
+    func recordObservedEvent(
+        type: CGEventType,
+        keyCode: CGKeyCode?,
+        modifierFlags: NSEvent.ModifierFlags,
+        swallowed: Bool,
+        injectedHyper: Bool
+    ) {
+        withLock {
+            _lastEventType = type
+            _lastKeyCode = keyCode
+            _lastModifierFlags = modifierFlags.rawValue
+            _lastShortcutWasSwallowed = swallowed
+            _lastHyperInjected = injectedHyper
+        }
+    }
+
+    func captureDisableSnapshot(reason: CGEventType) -> EventTapDiagnosticsSnapshot {
+        withLock {
+            _disableCount += 1
+            return EventTapDiagnosticsSnapshot(
+                reason: reason,
+                disableCount: _disableCount,
+                lastEventType: _lastEventType,
+                lastKeyCode: _lastKeyCode,
+                lastModifierFlags: _lastModifierFlags,
+                lastShortcutWasSwallowed: _lastShortcutWasSwallowed,
+                lastHyperInjected: _lastHyperInjected,
+                registeredShortcutCount: _registeredShortcuts.count,
+                hyperKeyEnabled: _hyperKeyEnabled,
+                hyperKeyHeld: _isHyperHeld
+            )
         }
     }
 

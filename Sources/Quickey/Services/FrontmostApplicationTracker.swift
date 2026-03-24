@@ -5,6 +5,11 @@ private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "Front
 
 @MainActor
 final class FrontmostApplicationTracker {
+    struct PreviousAppRestoreAttempt: Sendable, Equatable {
+        let bundleIdentifier: String?
+        let restoreAccepted: Bool
+    }
+
     struct Client: Sendable {
         let currentFrontmostBundleIdentifier: @MainActor () -> String?
         let processIdentifierForRunningApplication: @MainActor (String) -> pid_t?
@@ -13,6 +18,7 @@ final class FrontmostApplicationTracker {
     }
 
     private(set) var lastNonTargetBundleIdentifier: String?
+    private(set) var lastRestoreAttempt: PreviousAppRestoreAttempt?
     private let client: Client
 
     init(client: Client = .live) {
@@ -28,23 +34,50 @@ final class FrontmostApplicationTracker {
             return
         }
         lastNonTargetBundleIdentifier = current
+        lastRestoreAttempt = nil
     }
 
     /// Restore the previous app using SkyLight for reliable activation (consistent with AppSwitcher).
     @discardableResult
-    func restorePreviousAppIfPossible() -> Bool {
-        guard let bundleIdentifier = lastNonTargetBundleIdentifier,
-              let pid = client.processIdentifierForRunningApplication(bundleIdentifier) else {
-            lastNonTargetBundleIdentifier = nil
-            return false
+    func restorePreviousAppIfPossible() -> PreviousAppRestoreAttempt {
+        guard let bundleIdentifier = lastNonTargetBundleIdentifier else {
+            let attempt = PreviousAppRestoreAttempt(bundleIdentifier: nil, restoreAccepted: false)
+            lastRestoreAttempt = attempt
+            return attempt
         }
-        lastNonTargetBundleIdentifier = nil
+
+        guard let pid = client.processIdentifierForRunningApplication(bundleIdentifier) else {
+            let attempt = PreviousAppRestoreAttempt(bundleIdentifier: bundleIdentifier, restoreAccepted: false)
+            lastRestoreAttempt = attempt
+            return attempt
+        }
 
         if !client.setFrontProcess(pid) {
             logger.warning("restorePrevious: SkyLight failed for \(bundleIdentifier), falling back")
-            return client.activateRunningApplication(bundleIdentifier)
+            let attempt = PreviousAppRestoreAttempt(
+                bundleIdentifier: bundleIdentifier,
+                restoreAccepted: client.activateRunningApplication(bundleIdentifier)
+            )
+            lastRestoreAttempt = attempt
+            return attempt
         }
-        return true
+
+        let attempt = PreviousAppRestoreAttempt(bundleIdentifier: bundleIdentifier, restoreAccepted: true)
+        lastRestoreAttempt = attempt
+        return attempt
+    }
+
+    func confirmRestoreAttempt() {
+        guard let lastRestoreAttempt else { return }
+        if lastRestoreAttempt.restoreAccepted {
+            lastNonTargetBundleIdentifier = nil
+        }
+        self.lastRestoreAttempt = nil
+    }
+
+    func resetPreviousAppTracking() {
+        lastNonTargetBundleIdentifier = nil
+        lastRestoreAttempt = nil
     }
 }
 

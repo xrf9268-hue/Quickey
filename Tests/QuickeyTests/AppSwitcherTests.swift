@@ -130,6 +130,94 @@ func requestFallbackActivationUsesPlainActivationWhenBundleURLIsMissing() {
     #expect(plainActivateCalls == 1)
 }
 
+@Test
+func togglePostActionStateLogDetailsIncludesFrontmostAndTargetFlags() {
+    let state = TogglePostActionState(
+        frontmostBundleIdentifier: "com.openai.codex",
+        targetBundleIdentifier: "com.apple.Safari",
+        targetFrontmost: false,
+        targetHidden: true,
+        targetVisibleWindows: false
+    )
+
+    #expect(
+        state.logDetails ==
+        "postFrontmost=com.openai.codex, targetBundle=com.apple.Safari, targetFrontmost=false, targetHidden=true, targetVisibleWindows=false"
+    )
+}
+
+@Test @MainActor
+func postActionLogMessageUsesObservationSnapshotForFrontmostState() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+    let shortcut = AppShortcut(
+        appName: "Safari",
+        bundleIdentifier: "com.apple.Safari",
+        keyEquivalent: "s",
+        modifierFlags: ["command"]
+    )
+    let snapshot = ActivationObservationSnapshot(
+        targetBundleIdentifier: "com.apple.Safari",
+        observedFrontmostBundleIdentifier: "com.openai.codex",
+        targetIsActive: true,
+        targetIsHidden: false,
+        visibleWindowCount: 1,
+        hasFocusedWindow: false,
+        hasMainWindow: true,
+        windowObservationSucceeded: true,
+        windowObservationFailureReason: nil,
+        classification: .regularWindowed,
+        classificationReason: "visible window but frontmost mismatch"
+    )
+
+    let message = switcher.postActionLogMessage(
+        for: shortcut,
+        phase: "POST_ACTIVATE_STATE",
+        snapshot: snapshot
+    )
+
+    #expect(message.contains("postFrontmost=com.openai.codex"))
+    #expect(message.contains("targetFrontmost=false"))
+}
+
+@Test @MainActor
+func toggleLifecycleLogMessageIncludesStructuredObservationFields() {
+    let switcher = AppSwitcher(frontmostTracker: makeTrackerForAppSwitcherTests())
+    let shortcut = AppShortcut(
+        appName: "Safari",
+        bundleIdentifier: "com.apple.Safari",
+        keyEquivalent: "s",
+        modifierFlags: ["command"]
+    )
+    let snapshot = ActivationObservationSnapshot(
+        targetBundleIdentifier: "com.apple.Safari",
+        observedFrontmostBundleIdentifier: "com.openai.codex",
+        targetIsActive: true,
+        targetIsHidden: false,
+        visibleWindowCount: 1,
+        hasFocusedWindow: false,
+        hasMainWindow: true,
+        windowObservationSucceeded: true,
+        windowObservationFailureReason: nil,
+        classification: .regularWindowed,
+        classificationReason: "visible window but frontmost mismatch"
+    )
+
+    let message = switcher.toggleLifecycleLogMessage(
+        for: shortcut,
+        lifecycle: "TOGGLE_CONFIRMATION",
+        previousBundle: "com.openai.codex",
+        activationPath: "activate",
+        snapshot: snapshot,
+        elapsedMilliseconds: 75
+    )
+
+    #expect(message.contains("TOGGLE_CONFIRMATION"))
+    #expect(message.contains("previous=com.openai.codex"))
+    #expect(message.contains("activationPath=activate"))
+    #expect(message.contains("elapsedMs=75"))
+    #expect(message.contains("classification=\"regularWindowed\""))
+}
+
 @MainActor
 private func makeTrackerForAppSwitcherTests() -> FrontmostApplicationTracker {
     FrontmostApplicationTracker(client: .init(
