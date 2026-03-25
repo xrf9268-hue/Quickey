@@ -95,6 +95,28 @@ The first trigger may only have started activation, while the second trigger arr
 **Practical guidance**
 Do not let "activation requested" mean "activation complete". Require a short post-activation confirmation pass and only allow toggle-off from a stable active state. During pending or degraded activation, a repeat trigger should re-confirm or re-attempt activation instead of restoring away immediately.
 
+## Session-Owned Previous App Memory
+
+**Issue**
+Restore confirmation becomes unreliable if previous-app memory is cleared as soon as a restore attempt starts.
+
+**Cause**
+The restore path needs the same `previousBundle` to survive activation, pending confirmation, deactivation, and retry/degraded branches. A destructive read from a lightweight tracker loses that ownership too early.
+
+**Practical guidance**
+Let the toggle session own the durable `previousBundle` once a trigger is accepted. Use `FrontmostApplicationTracker` to capture the current frontmost app and execute restore attempts, but keep the authoritative previous-app value on the coordinator session until the session is reset.
+
+## Notification-Driven Toggle Invalidation
+
+**Issue**
+Stable toggle state can become stale as soon as the user changes apps outside Quickey.
+
+**Cause**
+Polling or one-shot snapshots miss external activation and termination changes, especially while a toggle session is still marked `activeStable` or `deactivating`.
+
+**Practical guidance**
+Use `NSWorkspace.didActivateApplicationNotification` to drop stable/deactivating sessions when another app becomes frontmost, and `NSWorkspace.didTerminateApplicationNotification` to clear sessions for terminated targets. This keeps runtime state aligned with user-visible app focus without adding polling noise.
+
 ## System Apps Need Honest Downgrade Rules
 
 **Issue**
@@ -115,4 +137,4 @@ Re-enabling an event tap after a timeout is necessary but not always sufficient.
 macOS can repeatedly disable the tap with `tapDisabledByTimeout`, which indicates sustained callback or lifecycle pressure rather than a one-off interruption.
 
 **Practical guidance**
-Keep the callback path light and re-enable in place first, but track rolling timeout counts. If repeated timeouts cluster together, escalate from in-place re-enable to full tap recreation and log the recovery tier so later diagnosis does not start from scratch.
+Keep the callback path light and re-enable in place first, but track rolling timeout counts. In Quickey's current recovery ladder, the first timeout stays in-place, 3 timeouts within 30 seconds escalate to full recreation, and 2 recreation failures within 120 seconds mark the tap subsystem degraded. Recreate the tap on the same dedicated background RunLoop thread, using a reusable readiness mechanism so repeated add/remove/recreate cycles do not deadlock.

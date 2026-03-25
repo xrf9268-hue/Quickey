@@ -1,7 +1,13 @@
 # Handoff Notes
 
 ## Current State
-Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-23, the runtime hardening follow-up added service-level test seams for permission, app discovery, frontmost-app restore, preferences, and activation fallback paths, and replaced the deprecated `activateIgnoringOtherApps` fallback with a modern `NSWorkspace` reopen request. Issue #67's launch-at-login approval-state UX also landed on 2026-03-23, including Settings foreground refresh coverage for launch-at-login state changes, and `swift test`, `swift build`, `swift build -c release`, and `./scripts/package-app.sh` were rerun afterward. Coverage for the newly targeted services is now measurable: `AccessibilityPermissionService` 64.29%, `AppListProvider` 40.78%, `AppPreferences` 72.50%, `FrontmostApplicationTracker` 43.64%, and `AppSwitcher` 10.55%. A deeper macOS runtime investigation later on 2026-03-23 found that toggle semantics are still not stable enough for some system apps such as Home: new post-action logs showed cases where the target app had visible windows while `NSWorkspace.shared.frontmostApplication` remained another bundle, and other cases where `NSRunningApplication.isActive` disagreed with the frontmost-app snapshot during restore. A design follow-up is now in progress to introduce stable activation gating, degraded-success rules for window-weird apps, and stricter event tap recovery observability. A signed and notarized distributable is still unresolved.
+Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-24, the toggle-stability and event-tap reliability plan's Tasks 1-5 were already present in `main`, and Task 6 updated the architecture/runtime documentation and reran the automated verification suite. The landed runtime now uses `ApplicationObservation` snapshots to decide whether activation is truly stable, keeps per-target toggle state in `ToggleSessionCoordinator`, stores session-owned `previousBundle` values across activation/deactivation phases, invalidates those sessions from `NSWorkspace` notifications, and escalates repeated event-tap timeout storms from in-place re-enable to same-thread recreation and then degraded readiness reporting. A signed and notarized distributable is still unresolved. No new manual macOS runtime claims are made in this task; the targeted post-redesign validation matrix remains pending.
+
+## Automated Verification (2026-03-24)
+- `swift test` passed after the Task 6 documentation update; the suite reported 146 tests passed
+- `swift build` passed after the Task 6 documentation update
+- `swift build -c release` passed after the Task 6 documentation update
+- `./scripts/package-app.sh` passed after the Task 6 documentation update, rebuilt `build/Quickey.app`, and reset TCC approvals for `com.quickey.app` as part of the ad-hoc packaging flow
 
 ## Validated on macOS
 - Broad real-device validation completed on macOS 15.3.1 on 2026-03-20
@@ -9,12 +15,31 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-23, the 
 - Dual permission gating, active capture startup, and end-to-end shortcut interception were validated
 - Runtime toggle behavior, restore/hide fallback, and window recovery paths were exercised successfully
 - Insights persistence and restart behavior were confirmed during the macOS pass
+- The 2026-03-24 toggle-stability/event-tap redesign has not yet had its targeted post-landing macOS validation pass
+
+## Implemented Behavioral Guarantees
+- Half-active frontmost mismatches are not promoted to stable: `ActivationObservationSnapshot.isStableActivation` requires target/frontmost agreement, `targetIsActive == true`, `targetIsHidden == false`, and supporting window evidence before `AppSwitcher` can promote a pending activation
+- A second press during pending activation does not toggle off: `pendingActivationState` blocks `shouldToggleOff`, and a repeat accepted trigger refreshes confirmation generation instead of restoring away
+- Confirmation failure does not trigger flicker-inducing restore-away rollback: failed confirmation either advances through the staged recovery path or drops the session back to idle/degraded without restoring the previous app automatically
+- Stable toggle-off now uses session-owned `previousBundle`, attempts restore first, hides as fallback when the post-restore observation is still contradictory, and clears runtime session state coherently
+- Event tap recovery now either recreates the tap successfully on the existing background RunLoop thread or leaves an explicit degraded readiness state after repeated recreation failures
 
 ## Follow-up Requiring macOS Validation
+- Normal apps: Safari, Finder, Terminal
+  Validate stable activation, second-press toggle-off back to the previous app, and coherent `TOGGLE_STABLE` / `TOGGLE_RESTORE_CONFIRMED` diagnostics
+- System or window-weird apps: Home, Clock, System Settings
+  Validate that visible-but-not-frontmost states do not promote to stable and that repeat presses during pending/degraded activation keep re-confirming instead of toggling away
+- Hidden app reactivation
+  Validate that an already-hidden target can return to `activeStable` and still restore the previous app on the next confirmed toggle-off
+- Minimized window recovery
+  Validate that unminimize/recovery stages settle before confirmation promotion and that missing visible-window evidence prevents false stable promotion
+- Fast repeated same-shortcut presses
+  Validate debounce plus pending-session behavior under rapid repeated input for the same target
+- Event tap timeout/recovery stress
+  If reproducible on macOS, trigger timeout churn and confirm: first timeout re-enables in place, 3 timeouts within 30 seconds escalate to recreation, and repeated recreation failures surface degraded readiness/logs
 - Launch-at-login approval flow after the 2026-03-23 issue #67 approval-state UX update, especially `.requiresApproval` -> `.enabled` foreground refresh and `.notFound` behavior on real installs
 - Active event-tap startup and readiness reporting after permission or lifecycle changes
 - AppSwitcher fallback behavior after SkyLight failure now that it re-requests activation via `NSWorkspace`
-- App toggle stability after the 2026-03-23 Home/system-app investigation, especially "visible but not truly frontmost" states and second-trigger behavior during transitional activation
 - Hyper Key failure handling, especially persistence only after `hidutil` succeeds
 - Insights date-window and refresh-race fixes
 - Signed/notarized distributable workflow once a Developer ID certificate is available
@@ -27,8 +52,13 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-23, the 
 - If SkyLight activation fails, Quickey now falls back to an `NSWorkspace` reopen request instead of the deprecated `activateIgnoringOtherApps` path
 - Unified logging can hide useful runtime details; file-based debug logs (`~/.config/Quickey/debug.log`) are more reliable for diagnosis
 
+## Residual Risks
+- The new toggle guarantees are covered by code-level tests and by the automated suite, but they still need the targeted macOS matrix above before we can claim runtime correctness for Home, Clock, System Settings, or timeout-stress behavior
+- Event tap recovery semantics are implemented with thresholded escalation and degraded reporting, but a reproducible on-device timeout-stress run is still needed to confirm the live logs are operationally sufficient
+- Signed/notarized release validation is still blocked on Developer ID availability
+
 ## Immediate Next Actions
-1. Turn the approved toggle-stability and event-tap reliability design into an implementation plan before making further runtime behavior changes
-2. Run a targeted macOS validation pass for normal apps and system apps after the stability redesign lands, especially Home, Clock, System Settings, and fast repeat-trigger flows
+1. Run the targeted macOS validation matrix for Safari, Finder, Terminal, Home, Clock, System Settings, hidden/minimized paths, fast repeat-trigger flows, and event-tap timeout stress
+2. Capture the real 2026-03-24 validation results in this file, including any degraded-state logs or app-specific exceptions that remain
 3. Produce a signed and notarized `.app` once a Developer ID certificate is available
 4. Fold any new validation findings back into this note, not into the feature overview docs
