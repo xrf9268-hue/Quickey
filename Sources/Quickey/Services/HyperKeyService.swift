@@ -30,8 +30,8 @@ final class HyperKeyService {
     typealias HidutilRunner = @Sendable ([String]) -> Bool
 
     /// HID usage codes (Apple TN2450)
-    nonisolated static let capsLockUsage: UInt64 = 0x700000039
-    nonisolated static let f19Usage: UInt64 = 0x700000068
+    nonisolated static let capsLockUsage: UInt64 = 0x700000039  // Keyboard CapsLock
+    nonisolated static let f19Usage: UInt64 = 0x70000006E       // Keyboard F19 (0x6E = 110)
     /// F19 virtual keyCode (Carbon Events)
     nonisolated static let f19KeyCode: CGKeyCode = 80  // kVK_F19 = 0x50
 

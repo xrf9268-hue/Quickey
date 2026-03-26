@@ -10,6 +10,17 @@ PROJECT_DIR="$(cd "$E2E_LIB_DIR/.." && pwd)"
 APP_PATH="$PROJECT_DIR/build/Quickey.app"
 LOG_FILE="$HOME/.config/Quickey/debug.log"
 QUICKEY_BUNDLE_ID="com.quickey.app"
+CGEVENT_HELPER="$E2E_LIB_DIR/cgevent-helper"
+CGEVENT_SRC="$E2E_LIB_DIR/cgevent-helper.swift"
+
+# Build CGEvent helper if source is newer than binary (or binary missing)
+if [ ! -x "$CGEVENT_HELPER" ] || [ "$CGEVENT_SRC" -nt "$CGEVENT_HELPER" ]; then
+    echo "  Building cgevent-helper..."
+    swiftc -O "$CGEVENT_SRC" -o "$CGEVENT_HELPER" || {
+        echo "ERROR: failed to compile cgevent-helper.swift" >&2
+        exit 1
+    }
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -169,14 +180,47 @@ send_keycode() {
     osascript -e "tell application \"System Events\" to key code $code"
 }
 
-# Send F19 followed immediately by a key code (Hyper Key testing)
+# Send F19 held + key tap for Hyper Key testing.
+# Strategy: try CGEvent helper first (real hold simulation); fall back to
+# osascript if CGEvent.post() fails (requires calling process to have
+# Accessibility permission — not always available in CI/IDE terminals).
+# The osascript fallback tests the deferred-keyUp path, which is the same
+# code path triggered by real Caps Lock hardware (toggle quirk).
 send_hyper_combo() {
     local letter_code="$1"
-    osascript -e "tell application \"System Events\"
+    if [ "$_HYPER_USE_OSASCRIPT" = "1" ]; then
+        osascript -e "tell application \"System Events\"
     key code 80
     key code $letter_code
 end tell"
+    else
+        "$CGEVENT_HELPER" combo 80 "$letter_code"
+    fi
 }
+
+# Probe once whether CGEvent posting reaches the event tap.
+# If not, fall back to osascript for the rest of the session.
+_HYPER_USE_OSASCRIPT="0"
+_probe_cgevent() {
+    if [ ! -f "$LOG_FILE" ]; then _HYPER_USE_OSASCRIPT="1"; return; fi
+    local pre
+    pre=$(wc -l < "$LOG_FILE" | tr -d ' ')
+    "$CGEVENT_HELPER" down 80 2>/dev/null
+    usleep 50000 2>/dev/null || sleep 0.05
+    "$CGEVENT_HELPER" up 80 2>/dev/null
+    usleep 50000 2>/dev/null || sleep 0.05
+    local slice
+    slice=$(tail -n +"$((pre + 1))" "$LOG_FILE" 2>/dev/null || true)
+    if echo "$slice" | grep -q "keyCode=80\|HYPER_FLAGS_CHANGED" 2>/dev/null; then
+        _HYPER_USE_OSASCRIPT="0"
+    else
+        _HYPER_USE_OSASCRIPT="1"
+    fi
+}
+
+# Send individual keyDown or keyUp via CGEvent (for precise event control)
+send_cgevent_down() { "$CGEVENT_HELPER" down "$1"; }
+send_cgevent_up()   { "$CGEVENT_HELPER" up "$1"; }
 
 # Send N rapid keystrokes in a single osascript (accurate sub-200ms timing)
 send_rapid_keystrokes() {

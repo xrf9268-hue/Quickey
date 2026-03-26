@@ -25,6 +25,7 @@ assert_not_contains "$SLICE" "MATCHED: IINA" "IINA not triggered by Safari short
 
 # --- Step 2: Hyper+A -> only IINA ---
 if is_hyper_key_enabled; then
+    _probe_cgevent
     echo ""
     echo "  -- Step 2: Hyper+A -> only IINA --"
     sleep 2

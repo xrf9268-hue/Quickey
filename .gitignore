@@ -6,5 +6,6 @@ build/
 *.o
 *.d
 *.swiftdeps
+scripts/cgevent-helper
 .claude/
 .worktrees/
