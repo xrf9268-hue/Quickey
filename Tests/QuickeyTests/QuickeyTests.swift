@@ -195,6 +195,8 @@ struct EventTapManagerDeliveryTests {
     func hyperKeyPressAndReleaseToggleHeldState() {
         let keyDown = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: true)
         let keyUp = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: false)
+        // Set keyUp timestamp > 80ms after keyDown so it is treated as a real release.
+        keyUp.timestamp = keyDown.timestamp + 100_000_000
         let box = EventTapBox()
         box.setHyperKey(enabled: true)
 
@@ -205,6 +207,83 @@ struct EventTapManagerDeliveryTests {
         let upResult = handleEventTapEvent(type: .keyUp, event: keyUp, box: box)
         #expect(upResult == nil)
         #expect(box.isHyperHeld == false)
+    }
+
+    @Test
+    func hyperKeyInstantKeyUpIsDeferredUntilNextKeyDown() {
+        // Caps Lock hardware can generate instant keyDown+keyUp on a single press.
+        // The instant keyUp (< 80ms) should NOT clear _isHyperHeld.
+        let keyDown = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: true)
+        let keyUp = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: false)
+        // Instant: keyUp timestamp is almost the same as keyDown
+        keyUp.timestamp = keyDown.timestamp + 1_000_000  // 1ms
+
+        let hyperShortcut = KeyPress(
+            keyCode: CGKeyCode(kVK_ANSI_A),
+            modifiers: [.command, .option, .control, .shift]
+        )
+        let box = EventTapBox()
+        box.setHyperKey(enabled: true)
+        box.registeredShortcuts = [hyperShortcut]
+
+        let _ = handleEventTapEvent(type: .keyDown, event: keyDown, box: box)
+        #expect(box.isHyperHeld == true)
+
+        // Instant keyUp arrives → should be deferred
+        let _ = handleEventTapEvent(type: .keyUp, event: keyUp, box: box)
+        #expect(box.isHyperHeld == true, "Instant keyUp should be deferred")
+
+        // Now a keyDown for A arrives → Hyper combo consumed, then clears held state
+        let aEvent = makeKeyEvent(CGKeyCode(kVK_ANSI_A), modifiers: [], keyDown: true)
+        let result = handleEventTapEvent(type: .keyDown, event: aEvent, box: box)
+        #expect(result == nil, "Hyper+A should be swallowed")
+        #expect(box.isHyperHeld == false, "Deferred keyUp should clear held state after combo")
+    }
+
+    @Test
+    func hyperKeyViaFlagsChangedSetsHeldState() {
+        // Caps Lock remapped to F19 may produce flagsChanged instead of keyDown/keyUp.
+        let pressEvent = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: .capsLock, keyDown: true)
+        let releaseEvent = makeKeyEvent(HyperKeyService.f19KeyCode, modifiers: [], keyDown: true)
+        let box = EventTapBox()
+        box.setHyperKey(enabled: true)
+
+        // Press: flagsChanged with capsLock flag → isHyperHeld = true, swallowed
+        let pressResult = handleEventTapEvent(type: .flagsChanged, event: pressEvent, box: box)
+        #expect(pressResult == nil)
+        #expect(box.isHyperHeld == true)
+
+        // Release: flagsChanged without capsLock flag → isHyperHeld = false, swallowed
+        let releaseResult = handleEventTapEvent(type: .flagsChanged, event: releaseEvent, box: box)
+        #expect(releaseResult == nil)
+        #expect(box.isHyperHeld == false)
+    }
+
+    @Test
+    func capsLockFlagDoesNotBreakShortcutMatching() {
+        // When Caps Lock toggle state leaks into event flags, shortcut should still match.
+        let hyperShortcut = KeyPress(
+            keyCode: CGKeyCode(kVK_ANSI_A),
+            modifiers: [.command, .option, .control, .shift]
+        )
+        // Simulate event with capsLock flag leaking through (0x10000)
+        let eventWithCapsLock = makeKeyEvent(
+            CGKeyCode(kVK_ANSI_A),
+            modifiers: [],
+            keyDown: true
+        )
+        // Set capsLock flag in addition to no other modifiers
+        eventWithCapsLock.flags = CGEventFlags(rawValue: UInt64(NSEvent.ModifierFlags.capsLock.rawValue))
+
+        let box = EventTapBox()
+        box.setHyperKey(enabled: true)
+        box.registeredShortcuts = [hyperShortcut]
+        // First set hyper held state (as if F19 was pressed)
+        box.isHyperHeld = true
+
+        let result = handleEventTapEvent(type: .keyDown, event: eventWithCapsLock, box: box)
+        // Should be swallowed (matched) despite capsLock flag in event
+        #expect(result == nil)
     }
 
     @Test
