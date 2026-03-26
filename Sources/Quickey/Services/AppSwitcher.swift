@@ -146,7 +146,7 @@ final class AppSwitcher: AppSwitching {
     /// Per-bundle cooldown: tracks when each bundle was last toggled to prevent rapid re-triggers.
     private var lastToggleTimeByBundle: [String: CFAbsoluteTime] = [:]
     /// Minimum interval (seconds) between toggles of the same bundle.
-    private let toggleCooldown: TimeInterval = 0.8
+    private let toggleCooldown: TimeInterval = 0.4
     private let cooldownCacheLimit = 20
     private let cooldownEvictionWindow: CFAbsoluteTime = 60
 

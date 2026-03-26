@@ -85,7 +85,7 @@ struct EventTapManagerDebounceTests {
         manager.handleAsync(keyPress)
         #expect(callCount == 1)
 
-        // Second call with same key within 200ms should be debounced
+        // Second call with same key immediately (0ms) should be debounced
         manager.handleAsync(keyPress)
         #expect(callCount == 1)
     }

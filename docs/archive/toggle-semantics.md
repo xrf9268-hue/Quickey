@@ -26,7 +26,7 @@ press hides it (ACTIVE_UNTRACKED path). This matches toggle semantics: "app is f
 
 ### Launch path
 The first shortcut press launches the app (no tracking state created). The second press hides it
-(ACTIVE_UNTRACKED). The 800ms cooldown prevents accidental double-trigger.
+(ACTIVE_UNTRACKED). The 400ms cooldown prevents accidental double-trigger.
 
 ### previousApp self-reference
 When target B was restored by another toggle-off, `lastNonTargetBundleIdentifier` may still

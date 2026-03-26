@@ -181,7 +181,7 @@ final class EventTapManager: EventTapManaging {
     private var backgroundThread: BackgroundRunLoopThread?
 
     /// Debounce: minimum interval between triggers for the same shortcut (seconds).
-    private let debounceInterval: TimeInterval = 0.5  // 500ms (raised from 200ms to prevent toggle loops)
+    private let debounceInterval: TimeInterval = 0.2  // safety net behind Layer 1 autorepeat filter
     private var lastTriggerTime: CFAbsoluteTime = 0
     private var lastTriggerKeyPress: KeyPress?
 

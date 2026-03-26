@@ -19,7 +19,7 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-03-24, the 
 
 ## Toggle Loop Fix and Cross-App Restore (2026-03-25, Issue #80)
 - **Toggle loop root cause**: physical key repeat events spaced > 200ms bypassed debounce, causing activate/hide/activate cycles
-- **Three-layer defense**: debounce 500ms + per-bundle toggle cooldown 800ms + re-entry guard
+- **Three-layer defense**: debounce 200ms + per-bundle toggle cooldown 400ms + re-entry guard (reduced from 500ms/800ms in issue #82; Layer 1 autorepeat filter is the primary defense)
 - **Cross-app restore bug found and fixed**: when App A's toggle-off restores App B, pressing App B's shortcut failed to toggle it off. Root cause: `stableActivationState` for B was cleared when A was toggled on, and never recreated when B was restored externally. Fixed by adding `ACTIVE_UNTRACKED` path that hides the app when it is frontmost but has no tracking state.
 - **Additional hardening**: previousApp self-reference guard, coordinator invalidation logging, lastToggleTimeByBundle eviction, activate-path isActive warning
 
