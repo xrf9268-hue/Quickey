@@ -66,6 +66,10 @@ final class ToggleSessionCoordinator {
         session(for: bundleIdentifier)?.previousBundle
     }
 
+    func durablePreviousBundle(for bundleIdentifier: String) -> String? {
+        session(for: bundleIdentifier)?.previousBundle
+    }
+
     // MARK: - Mutations
 
     @discardableResult
