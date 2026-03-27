@@ -257,11 +257,25 @@ Cache fields：
 
 设计要求：
 
+- `TapContextCache` 本体留在 `@MainActor`
+- `ToggleRuntime` 是 cache 的唯一写入协调者；`ObservationBroker` 只在主 actor 上提供用于失效或降级判断的证据
+- `ActivationPipeline` 不直接持有或读取 cache；主 actor 必须先把所需字段提取为不可变 `RestoreContext` value type 后再传入后台执行器
 - `PSN` 和 `windowID` 都只能视为 hint，而不是永久真值
 - 任何 cached process identity 都必须在使用前验证 pid/bundle 仍然匹配
 - 任何 cached `windowID` 都必须在使用前验证仍归属于同一 pid / bundle 的可用窗口
 - app termination、frontmost change、session reset 都要驱动缓存失效或降级
 - `temporaryCompatibilityUntil` 只存在于运行时内存，不跨 app 重启持久化
+
+`RestoreContext` 至少应包含：
+
+- `targetBundleIdentifier`
+- `previousBundleIdentifier`
+- `previousPID`
+- `previousPSNHint`
+- `previousWindowIDHint`
+- `previousBundleURL`
+- `capturedAt`
+- `generation`
 
 #### `ActivationPipeline`
 
@@ -341,6 +355,12 @@ Execution model：
 - 使用 generation cancellation，保证后来的请求能让旧请求在确认前失效
 
 这比“每个 bundle 各自并行执行”更符合前台 app 是全局资源这一事实。
+
+`TapContextCache` 的 actor 归属也遵循同一原则：
+
+- cache 保持在主 actor
+- 任何后台命令只消费主 actor 提前提取的不可变 `RestoreContext`
+- 后台命令返回后，由主 actor 决定是否更新 cache、session 和降级状态
 
 ### 3. TapContextCache Design
 
@@ -431,6 +451,8 @@ Prepare 策略：
 
 这个规则的目标不是“惩罚失败”，而是避免已知怪异 app 反复支付一次无意义的 fast-lane miss 成本。
 
+这些阈值是初始设计值，不是最终发布常量；在 M1 observability 建立真实 miss 分布后，必须基于数据重新校准，再决定默认 rollout 值。
+
 ### 5. Observation Strategy
 
 `ObservationBroker` 必须采用“廉价确认优先，昂贵确认按需升级”的策略。
@@ -464,6 +486,16 @@ Prepare 策略：
 - 必要时对 target 或 previous app 做更完整的 AX window evidence 查询
 
 设计原则是：确认本身不能重新成为新的性能瓶颈。
+
+#### Primary Confirmation Mechanism
+
+确认机制的首选方案不是无限轮询，而是“通知优先，短窗口回退轮询”：
+
+- 主方案：在 `@MainActor` 上消费 `NSWorkspace.didActivateApplicationNotification`，因为仓库现有 runtime 已经依赖该通知做 session invalidation
+- 辅助方案：在有限确认窗口内，对 `frontmostApplication` 做短间隔回退检查，用来覆盖通知延迟或时序缺口
+- 不使用无界轮询；回退检查必须绑定 attempt budget 和 confirmation window
+
+这使确认延迟既能受控，又不必把所有成功路径都变成持续轮询。
 
 ### 6. Command Execution Model
 
@@ -569,6 +601,15 @@ Prepare 策略：
 - 不在 M1/M2 阶段贸然降低阈值
 - 只有在 new pipeline 与 fast lane 稳定后，再进入阈值复调阶段
 
+#### Coexistence Rules
+
+在 generation cancellation 与现有 cooldown / debounce 并存阶段，优先级规则如下：
+
+- 若 cooldown 或 debounce 在入口层就阻止本次触发，则该请求不会被接受，也不会分配新 generation
+- generation cancellation 只作用于“已经被接受并进入 runtime”的请求
+- 在 M1/M2 阶段，legacy cooldown 仍然是入口保护；new runtime 只对已接受请求做取消与抢占
+- 只有在 M3 以后，且数据证明 new runtime 能稳定承担主要重入保护时，才允许进一步缩小 cooldown 的职责范围
+
 ### 8. Observability And Metrics
 
 这项工作如果没有可比较数据，最后只会退化成“感觉快了一点”。
@@ -592,6 +633,9 @@ Prepare 策略：
 - `queueWaitMs`
 - `mutatingCommandCount`
 - `attemptBudgetExceeded=true|false`
+- `axHideErrorCode`
+- `restoreErrorCode`
+- `cacheInvalidationReason`
 
 现有 `DiagnosticLog` 足够作为主记录载体；不需要把同步日志写回热路径，只需保持结构化 `key=value` 输出即可。
 
@@ -622,6 +666,7 @@ Prepare 策略：
 - `cheap confirmation contradicts -> escalated confirmation`
 - `shadow mode logs fast-lane decision without executing mutating command`
 - `command timeout maps to fallback or degraded exactly as designed`
+- `previous app quits between toggle-on and toggle-off -> cache invalidation + compatibility fallback`
 
 #### macOS Manual Validation
 
@@ -678,6 +723,7 @@ Linux 或 CI 只能验证逻辑与编译，不能宣称最终体感或系统 API
 - shadow mode 的决策与 legacy 结果能够稳定对齐
 - 已能识别哪些 bundle 会稳定命中 fast lane，哪些 bundle 应长期留在 compatibility lane
 - 关键竞态场景在 shadow mode 日志中可复盘
+- 对命名的 normal apps，必须验证 `restorePreviousFast` 在不执行 `hideTarget` 的前提下，能可靠地让 target 不再 frontmost
 
 ### Milestone 3: Fast Lane Default For Normal Apps
 
@@ -710,20 +756,20 @@ Linux 或 CI 只能验证逻辑与编译，不能宣称最终体感或系统 API
 
 ## Acceptance Criteria
 
-- 正常 app 的 toggle-off 默认走 fast lane，不再一律 hide-first
-- fast lane miss 时，Quickey 自动升级 compatibility lane，而不是要求用户补按第二次
-- 主 actor 不再承担 AX / SkyLight 热路径的同步串行执行
-- 只读预热与 mutating command 在执行模型上被明确分离
-- cheap confirmation 成为默认确认策略，昂贵 AX/window observation 只在矛盾或 compatibility lane 中升级
-- 系统/怪异 app 仍保留兼容与降级恢复能力
-- bundle 级 temporary compatibility quarantine 生效，且不跨重启持久化
-- 单次 attempt 遵守 `fast -> compatibility -> degraded` 的升级预算，不允许无限补救
-- 路线图包含 kill switch，可在迁移期快速退回 compatibility-first 或 legacy path
-- shadow mode 作为默认切换前的中间阶段存在，并能证明 lane 决策与 legacy 结果基本一致
-- 每类 command 都有明确 timeout budget 和 timeout 后语义
-- runtime invariants 在实现与测试层都有对应保护
-- 阈值调优建立在新 pipeline 和真实度量数据之上，而不是拍脑袋改数字
-- 最终体验结论通过 macOS 真机验证获得，而不是 Linux-only 推断
+- `[M2]` 主 actor 不再承担 AX / SkyLight 热路径的同步串行执行
+- `[M2]` 只读预热与 mutating command 在执行模型上被明确分离
+- `[M2]` 每类 command 都有明确 timeout budget 和 timeout 后语义
+- `[M2]` runtime invariants 在实现与测试层都有对应保护
+- `[M2]` 路线图包含 kill switch，可在迁移期快速退回 compatibility-first 或 legacy path
+- `[M2.5]` shadow mode 作为默认切换前的中间阶段存在，并能证明 lane 决策与 legacy 结果基本一致
+- `[M3]` 正常 app 的 toggle-off 默认走 fast lane，不再一律 hide-first
+- `[M3]` fast lane miss 时，Quickey 自动升级 compatibility lane，而不是要求用户补按第二次
+- `[M3]` cheap confirmation 成为默认确认策略，昂贵 AX/window observation 只在矛盾或 compatibility lane 中升级
+- `[M3]` 系统/怪异 app 仍保留兼容与降级恢复能力
+- `[M3]` bundle 级 temporary compatibility quarantine 生效，且不跨重启持久化
+- `[M3]` 单次 attempt 遵守 `fast -> compatibility -> degraded` 的升级预算，不允许无限补救
+- `[M4]` 阈值调优建立在新 pipeline 和真实度量数据之上，而不是拍脑袋改数字
+- `[Validation]` 最终体验结论通过 macOS 真机验证获得，而不是 Linux-only 推断
 
 ## Risks And Mitigations
 
@@ -743,6 +789,14 @@ Linux 或 CI 只能验证逻辑与编译，不能宣称最终体感或系统 API
 - 使用前重新验证 cached `windowID` 仍归属原 process identity
 - fast-lane miss 自动退回 compatibility lane
 - miss 达阈值后启用 temporary compatibility quarantine
+
+### 风险：PSN hint 的平台长期风险
+
+缓解：
+
+- 把 `PSN` 明确视为可选 hint，而不是设计前提
+- 若 `PSN` 不可用或未来平台行为变化，runtime 必须退化到不依赖 PSN hint 的 compatibility 路径
+- 不允许把 fast lane 的正确性绑定到“PSN 一定可预取且可复用”这一假设上
 
 ### 风险：迁移期新旧路径并存导致复杂度上升
 
