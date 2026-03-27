@@ -54,10 +54,20 @@ else
 PLIST
 fi
 
-echo "==> Resetting TCC permissions (ad-hoc signing changes hash on each build)..."
-tccutil reset Accessibility "$BUNDLE_ID" 2>/dev/null || true
-tccutil reset ListenEvent "$BUNDLE_ID" 2>/dev/null || true
-echo "    Permissions reset. App will re-request on launch."
+# Sign with a stable identity if available; fall back to ad-hoc.
+# A stable identity (e.g. "Quickey Dev" self-signed cert) lets TCC
+# permissions survive across rebuilds. Create one via:
+#   Keychain Access → Certificate Assistant → Create a Certificate
+#   Name: "Quickey Dev", Type: Code Signing
+SIGN_IDENTITY="Quickey"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
+    echo "==> Signing with '$SIGN_IDENTITY' (TCC permissions will persist across builds)..."
+    codesign --force --sign "$SIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP_DIR" 2>&1
+else
+    echo "==> Ad-hoc signed (no '$SIGN_IDENTITY' cert found)."
+    echo "    TCC permissions may need re-granting after each rebuild."
+    echo "    To fix: create a self-signed cert named '$SIGN_IDENTITY' in Keychain Access."
+fi
 
 echo "==> Done: $APP_DIR"
 echo "    Run with: open $APP_DIR"

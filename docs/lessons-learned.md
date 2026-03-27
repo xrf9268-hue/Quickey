@@ -216,6 +216,46 @@ When Caps Lock is remapped to F19 via `hidutil`, the system may generate both `k
 **Practical guidance**
 If both event types are handled in a CGEvent tap callback, the two code paths must be mutually exclusive for the same key code. Use a flag (e.g., `_f19ReceivedViaKeyDown`) to detect which path is active and skip the other. The `flagsChanged` path should still swallow the event (return nil) to prevent it from reaching applications, but must not modify shared state that the `keyDown`/`keyUp` path owns. Reset the mutual-exclusion flag when the feature is disabled so the fallback path remains available after re-enable.
 
+## osascript `key code` 无法模拟按住按键
+
+**Issue**
+E2E 测试中 `send_hyper_combo` 用 osascript `key code 80; key code 0` 测 Hyper Key，测试"偶然"通过但实际没测到真实场景。
+
+**Cause**
+osascript `key code N` 发送完整的 keyDown+keyUp 对，无法模拟"按住 F19 同时按字母"。旧测试能通过纯粹是因为 deferred keyUp 机制（80ms 阈值）恰好兜住了 F19 的瞬时 keyUp。一旦 osascript 处理延迟 >80ms，测试就会失败。
+
+**Practical guidance**
+需要独立控制 keyDown/keyUp 时，用编译的 Swift helper 通过 `CGEvent.post(tap: .cghidEventTap)` 发送事件。遵循业界做法：
+- **Event Source**: `CGEventSource(stateID: .hidSystemState)`（Karabiner-Elements、KeyboardSimulator 均使用）
+- **Tap Location**: `.cghidEventTap`（Apple CGEvent.h: 事件从 HID 层流过所有下游 session tap）
+- **Timing**: modifier→key 10ms, key down→up 1ms（Karabiner-Elements appendix/cg_post_event 的模式）
+- **Combo 序列**: holdKey↓ → 10ms → tapKey↓ → 1ms → tapKey↑ → 10ms → holdKey↑
+
+参考项目：Karabiner-Elements (`appendix/cg_post_event`)、Hammerspoon (`eventtap/libeventtap.m`)、skhd (`src/synthesize.c`)。
+
+## HID Usage Code ≠ Carbon Virtual KeyCode
+
+**Issue**
+hidutil `UserKeyMapping` 声称映射 Caps Lock → F19，`hidutil property --get` 也显示映射活跃，但物理 Caps Lock 按键在 CGEvent tap 中产生 F13 (keyCode=105) 而非 F19 (keyCode=80)。
+
+**Cause**
+HID usage code 和 Carbon virtual key code 是两套完全不同的编码系统。常见陷阱：
+- F13 HID usage = `0x68` → 完整 HID usage = `0x700000068`
+- F19 HID usage = `0x6E` → 完整 HID usage = `0x70000006E`
+- F13 Carbon keyCode = `105` (kVK_F13 = 0x69)
+- F19 Carbon keyCode = `80` (kVK_F19 = 0x50)
+
+原始代码将 `f19Usage` 错误设为 `0x700000068`（实际是 F13），导致 hidutil 把 Caps Lock 映射到 F13，但 event tap 在监听 keyCode=80 (F19)。两者完全不匹配。
+
+**Practical guidance**
+在 Apple TN2450 的 HID usage table 中查找正确的 usage 值。不要混淆 HID usage (0x07 page) 和 Carbon virtual key code (Events.h)。编写映射代码时，用物理按键测试验证映射结果——osascript `key code N` 直接注入 CGEvent，绕过 HID 层，无法测出 HID usage 错误。验证 hidutil 映射时，必须使用物理按键 + event tap 日志确认实际收到的 keyCode。
+
+**Reference**
+- Apple TN2450: HID usage codes (0x07 page)
+- Carbon Events.h: virtual key codes (kVK_*)
+- HID Keyboard page: F13=0x68, F14=0x69, F15=0x6A, F16=0x6B, F17=0x6C, F18=0x6D, F19=0x6E, F20=0x6F
+- Carbon: kVK_F13=0x69(105), kVK_F19=0x50(80)
+
 ## Event Tap Timeout Recovery Needs Escalation
 
 **Issue**

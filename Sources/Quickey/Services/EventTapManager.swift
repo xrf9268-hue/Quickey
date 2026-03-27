@@ -118,12 +118,19 @@ func handleEventTapEvent(
                 swallowed: true,
                 injectedHyper: false
             )
+            DispatchQueue.global(qos: .utility).async {
+                DiagnosticLog.log("HYPER_F19_DOWN: keyCode=\(keyCode) flags=\(modifierFlags.rawValue) ts=\(eventTimestamp)")
+            }
             return nil
         }
 
         if injectHyper {
             event.flags = event.flags.strippingCapsLock
                 .union([.maskControl, .maskAlternate, .maskShift, .maskCommand])
+            let resultFlags = event.flags.rawValue
+            DispatchQueue.global(qos: .utility).async {
+                DiagnosticLog.log("HYPER_INJECT: keyCode=\(keyCode) resultFlags=\(resultFlags) matched=\(swallow)")
+            }
         }
 
         let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
@@ -169,6 +176,13 @@ func handleEventTapEvent(
             return false
         }
         let modifierFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
+        if swallowUp {
+            let elapsed = event.timestamp - box.withLock({ box._hyperKeyDownTimestamp })
+            let deferred = box.withLock({ box._hyperKeyUpDeferred })
+            DispatchQueue.global(qos: .utility).async {
+                DiagnosticLog.log("HYPER_F19_UP: keyCode=\(keyCode) elapsed=\(elapsed) deferred=\(deferred)")
+            }
+        }
         box.recordObservedEvent(
             type: .keyUp,
             keyCode: keyCode,
