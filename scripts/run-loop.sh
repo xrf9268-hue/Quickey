@@ -29,7 +29,7 @@ while $RUNNING; do
        --model opus \
        --max-turns 50 \
        --dangerously-skip-permissions \
-       --output-format text \
+       --output-format stream-text \
        -p "$(cat "$REPO/docs/loop-prompt.md")" \
        2>&1 | stdbuf -oL tee -a "$LOG_FILE"; then
     consecutive_failures=0
