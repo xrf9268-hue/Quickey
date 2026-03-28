@@ -1,19 +1,18 @@
 import Foundation
+import os
 import Testing
 @testable import Quickey
 
 @Test
 func latestGenerationDropsQueuedMutatingCommandsBeforeExecution() async {
     let store = LatestGenerationStore()
-    var executedCommands: [Int] = []
-    let executedLock = NSLock()
+    let executedCommands = OSAllocatedUnfairLock<[Int]>(initialState: [])
 
     let pipeline = ActivationPipeline(
         timeouts: ActivationTimeoutBudget(),
         client: .init(
             prepareRestoreContext: { _ in .completed("prepared") },
             runMutatingCommand: { command in
-                executedLock.lock()
                 // Extract generation from the command's restore context
                 let gen: Int
                 switch command {
@@ -24,8 +23,7 @@ func latestGenerationDropsQueuedMutatingCommandsBeforeExecution() async {
                 default:
                     gen = -1
                 }
-                executedCommands.append(gen)
-                executedLock.unlock()
+                executedCommands.withLock { $0.append(gen) }
                 return .completed("done")
             }
         )
@@ -82,10 +80,8 @@ func latestGenerationDropsQueuedMutatingCommandsBeforeExecution() async {
     // Generation 2 should execute normally
     #expect(result2 == .completed("done"))
 
-    executedLock.lock()
     // Only generation 2 should have actually executed
-    #expect(executedCommands == [2])
-    executedLock.unlock()
+    executedCommands.withLock { #expect($0 == [2]) }
 }
 
 @Test
