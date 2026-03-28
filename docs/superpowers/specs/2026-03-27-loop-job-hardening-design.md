@@ -10,7 +10,7 @@ Date: 2026-03-27
 2. **无信号处理**：kill 进程时无法优雅停止，可能中断正在进行的 PR 创建
 3. **无日志持久化**：仅 stdout 输出到 tmux 缓冲区，无法事后审计
 4. **Prompt 缺少安全约束**：无危险操作禁止清单、无分支保护、无复杂 Issue 分轮策略
-5. **未使用 `--bare` 模式**：每次迭代加载 hooks/plugins/MCP，增加不必要的启动时间和上下文
+5. ~~**未使用 `--bare` 模式**~~（已废弃：`--bare` 会禁用 OAuth 认证，Pro 订阅用户无法使用）
 6. **路径未加引号**：存在空格路径风险
 7. **复杂 Issue 处理不当**：prompt 未体现 Wiki 中的 two-round strategy
 
@@ -26,18 +26,17 @@ Date: 2026-03-27
 
 ### 1. `scripts/run-loop.sh` 改造
 
-#### 新增 CLI 参数
+#### CLI 参数
 
 | 参数 | 理由 |
 |------|------|
-| `--bare` | 官方推荐用于脚本调用，跳过 hooks/plugins/MCP 自动发现，加速启动 |
-| `--add-dir .` | **关键**：`--bare` 会跳过 CLAUDE.md 自动发现，必须通过 `--add-dir .` 让 claude 加载项目根目录的 CLAUDE.md 和 AGENTS.md |
 | `--model opus` | 明确指定模型。使用别名 `opus` 而非固定 model ID（如 `claude-opus-4-6`），跟随 CLI 版本指向最新 Opus 模型。对于 loop job 场景，使用最新模型比可重现性更重要 |
 
 保留不变的参数：`--dangerously-skip-permissions`、`--max-turns 50`、`--output-format text`。
 
+**不使用 `--bare` 模式**：`--bare` 会禁用 OAuth 认证（仅支持 API Key 和 apiKeyHelper），Pro 订阅通过 OAuth 登录的用户在 bare 模式下会报 "Not logged in"。去掉 `--bare` 后也不再需要 `--add-dir .`（非 bare 模式自动发现 CLAUDE.md / AGENTS.md）。启动时会加载 hooks/MCP servers，但对 30 分钟间隔的任务影响可忽略。
+
 不通过 `--tools`/`--allowedTools`/`--disallowedTools` 限制内置工具集，原因：
-- `--bare` 隔离了外部 MCP servers 和 plugins（但不影响内置工具如 Bash、Read、WebFetch 等）
 - loop job 可能需要 WebFetch/WebSearch 查询文档和 API 参考
 - 安全边界放在 prompt 约束中
 
