@@ -32,7 +32,7 @@ Date: 2026-03-27
 |------|------|
 | `--model opus` | 明确指定模型。使用别名 `opus` 而非固定 model ID（如 `claude-opus-4-6`），跟随 CLI 版本指向最新 Opus 模型。对于 loop job 场景，使用最新模型比可重现性更重要 |
 
-保留不变的参数：`--dangerously-skip-permissions`、`--max-turns 50`、`--output-format text`。
+保留不变的参数：`--dangerously-skip-permissions`、`--max-turns 50`、`--output-format stream-json`（使用 `stream-json` 而非 `text`，支持实时逐行输出到日志，避免任务完成前无法监控进度）。
 
 **不使用 `--bare` 模式**：`--bare` 会禁用 OAuth 认证（仅支持 API Key 和 apiKeyHelper），Pro 订阅通过 OAuth 登录的用户在 bare 模式下会报 "Not logged in"。去掉 `--bare` 后也不再需要 `--add-dir .`（非 bare 模式自动发现 CLAUDE.md / AGENTS.md）。启动时会加载 hooks/MCP servers，但对 30 分钟间隔的任务影响可忽略。
 
