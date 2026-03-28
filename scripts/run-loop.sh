@@ -25,8 +25,7 @@ echo "[loop] Starting Quickey loop job (interval: ${INTERVAL}s)" | stdbuf -oL te
 while $RUNNING; do
   echo "[loop] $(date '+%Y-%m-%d %H:%M:%S') - Running iteration..." | stdbuf -oL tee -a "$LOG_FILE"
 
-  if claude --bare \
-       --add-dir . \
+  if claude \
        --model opus \
        --max-turns 50 \
        --dangerously-skip-permissions \
