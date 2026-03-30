@@ -131,7 +131,7 @@ func contextPreparationUsesBoundedConcurrency() async {
     let allStarted = DispatchSemaphore(value: 0)
 
     let pipeline = ActivationPipeline(
-        timeouts: ActivationTimeoutBudget(),
+        timeouts: ActivationTimeoutBudget(prepareRestoreContext: 1.0),
         client: .init(
             prepareRestoreContext: { _ in
                 let current = concurrentCount.withLock { val -> Int in
@@ -142,7 +142,7 @@ func contextPreparationUsesBoundedConcurrency() async {
                     if current > val { val = current }
                 }
                 allStarted.signal()
-                // Hold to allow overlap
+                // Hold to allow overlap — must be shorter than prepareRestoreContext timeout
                 Thread.sleep(forTimeInterval: 0.05)
                 concurrentCount.withLock { val in val -= 1 }
                 return .completed("prepared")
