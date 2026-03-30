@@ -418,10 +418,12 @@ final class AppSwitcher: AppSwitching {
 
         if shouldToggleOff(bundleIdentifier: shortcut.bundleIdentifier, runningAppIsActive: runningApp.isActive),
            preActionSnapshot.isStableActivation {
+            let shadowPreviousApp = sessionCoordinator.previousBundle(for: shortcut.bundleIdentifier)
+                ?? stableActivationState?.previousBundleIdentifier
+                ?? frontmostTracker.lastNonTargetBundleIdentifier
             let runtimeDecision = toggleRuntime.decision(
                 targetBundleIdentifier: shortcut.bundleIdentifier,
-                previousBundleIdentifier: stableActivationState?.previousBundleIdentifier
-                    ?? sessionCoordinator.previousBundle(for: shortcut.bundleIdentifier),
+                previousBundleIdentifier: shadowPreviousApp,
                 classification: preActionSnapshot.classification,
                 attemptStartedAt: attemptStartedAt
             )

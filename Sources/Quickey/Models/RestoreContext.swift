@@ -15,7 +15,10 @@ struct RestoreContext: Sendable, Equatable {
         lhs.targetBundleIdentifier == rhs.targetBundleIdentifier
             && lhs.previousBundleIdentifier == rhs.previousBundleIdentifier
             && lhs.previousPID == rhs.previousPID
+            && lhs.previousPSNHint?.highLongOfPSN == rhs.previousPSNHint?.highLongOfPSN
+            && lhs.previousPSNHint?.lowLongOfPSN == rhs.previousPSNHint?.lowLongOfPSN
             && lhs.previousWindowIDHint == rhs.previousWindowIDHint
+            && lhs.previousBundleURL == rhs.previousBundleURL
             && lhs.capturedAt == rhs.capturedAt
             && lhs.generation == rhs.generation
     }
