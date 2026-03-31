@@ -94,6 +94,15 @@ If a change cannot be verified on Linux, document what must be verified on macOS
 - End-to-end shortcut testing on macOS: `osascript` key events penetrate session-level event taps; `cliclick` does not. Use `osascript -e 'tell application "System Events" to key code ...'` for E2E validation of the full event tap → match → toggle pipeline.
 - `kCGKeyboardEventAutorepeat` (Apple SDK: "non-zero when this is an autorepeat of a key-down") must be filtered in the event tap callback to prevent held-key loops.
 
+## macOS runtime validation policy
+
+Runtime-sensitive changes = event taps, app activation, permissions/TCC, Accessibility/Input Monitoring, login items, launch behavior, packaging/signing.
+
+- Development merges may rely on CI + review gates alone
+- Runtime-sensitive PRs must carry `macOS runtime validation pending` until validated on macOS, then update to `macOS runtime validation complete`
+- Release-candidate signoff requires all pending items validated
+- Never rewrite history to imply pending validation was completed
+
 ## Investigation before implementation
 
 - Do not change code before you understand the failure mode or behavior gap.

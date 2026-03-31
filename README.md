@@ -30,10 +30,10 @@ swift test
 Run automated Claude Code sessions to process issues and PRs:
 
 ```
-/loop 30m Follow the instructions in docs/loop-prompt.md
+/loop 30m /babysit-prs
 ```
 
-Each iteration uses `/code-review` ([code-review plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/code-review)) and bot reviews as PR-posted quality gates, plus `/codex:review` ([Codex Plugin CC](https://github.com/openai/codex-plugin-cc)) for session-local supplementary review. See [`docs/loop-job-guide.md`](./docs/loop-job-guide.md) for details.
+Each iteration runs preflight checks, processes open PRs, selects an issue, implements with review gates, and defers merge until CI and async reviews settle. See [`docs/loop-job-guide.md`](./docs/loop-job-guide.md) for details.
 
 ## Documentation
 - [`docs/README.md`](./docs/README.md)
