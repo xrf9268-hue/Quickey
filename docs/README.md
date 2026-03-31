@@ -12,8 +12,8 @@ This directory maps the maintainer-facing docs for Quickey.
 - [`lessons-learned.md`](./lessons-learned.md)
 
 ## Automation
-- [`loop-prompt.md`](./loop-prompt.md) — autonomous `/loop` iteration prompt
-- [`loop-job-guide.md`](./loop-job-guide.md) — how to run and manage loop jobs
+- [`loop-prompt.md`](./loop-prompt.md) — reference and migration note; active automation is the `/babysit-prs` skill
+- [`loop-job-guide.md`](./loop-job-guide.md) — how to run and manage loop jobs with `/loop 30m /babysit-prs`
 
 ## Historical and Process Docs
 - [`archive/`](./archive/)
