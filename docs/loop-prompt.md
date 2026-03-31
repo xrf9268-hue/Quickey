@@ -55,9 +55,10 @@ PRs may have feedback from three sources:
 Handling rules:
 - Read PR comments for bot review findings: `gh pr view <number> --comments`
 - For `/review` and `/codex:review`: check session memory for findings from prior iterations (session context persists across `/loop` firings).
+- To run `/codex:review` on an existing PR: checkout the branch first, then run `/codex:review --base main --background`. Use `/codex:status` to check progress and `/codex:result` to retrieve findings.
 - **P0/P1 bot findings**, **high-confidence `/review` findings**, and **critical `/codex:review` findings**: treat as must-fix. Address them and push fixes.
 - **P2+ bot findings** and **minor `/codex:review` findings**: evaluate — fix if straightforward, otherwise note in a reply comment explaining why it was skipped (e.g., false positive, out of scope).
-- After fixing, run `/review` and `/codex:review` once more. If new high-confidence issues appear that you cannot resolve in **2 attempts**:
+- After fixing, run `/review` and `/codex:review --base main --background` once more. If new high-confidence issues appear that you cannot resolve in **2 attempts**:
   - Add label `needs-human-review`.
   - Comment describing unresolved findings.
   - Move on.
@@ -134,11 +135,11 @@ gh pr create \
 Run **two review passes** on the PR you just created (bot reviews arrive asynchronously and will be handled in Step 1c of a future iteration):
 
 1. `/review` — session-local self-review
-2. `/codex:review` — [Codex Plugin CC](https://github.com/openai/codex-plugin-cc) delegated review (run synchronously; use `--background` + `/codex:status` + `/codex:result` only if turn budget is tight)
+2. `/codex:review --base main --background` — [Codex Plugin CC](https://github.com/openai/codex-plugin-cc) delegated review against main (runs in background; check `/codex:status`, retrieve with `/codex:result`)
 
 Then:
 
-- **Round 1**: If either tool reports high-confidence / critical issues, fix them and push. Re-run `/review` and `/codex:review`.
+- **Round 1**: If either tool reports high-confidence / critical issues, fix them and push. Re-run `/review` and `/codex:review --base main --background`.
 - **Round 2**: If issues persist after fixes:
   - If you can resolve them in 1-2 more changes, do so and push. Do NOT run a third round.
   - If the issues are architectural or unclear, add label `needs-human-review` and comment on the PR with the unresolved findings.
