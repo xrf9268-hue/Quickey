@@ -117,6 +117,7 @@ Key docs to update after meaningful changes:
 - `docs/README.md`
 - `docs/architecture.md`
 - `docs/handoff-notes.md`
+- `docs/loop-prompt.md` and `docs/loop-job-guide.md` (if changing review gates or automation workflow)
 
 ## Source of truth for planning
 

@@ -33,7 +33,7 @@ Run automated Claude Code sessions to process issues and PRs:
 /loop 30m Follow the instructions in docs/loop-prompt.md
 ```
 
-See [`docs/loop-job-guide.md`](./docs/loop-job-guide.md) for details.
+Each iteration uses `/review`, `/codex:review` ([Codex Plugin CC](https://github.com/openai/codex-plugin-cc)), and bot reviews for code quality gates. See [`docs/loop-job-guide.md`](./docs/loop-job-guide.md) for details.
 
 ## Documentation
 - [`docs/README.md`](./docs/README.md)

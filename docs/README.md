@@ -11,6 +11,10 @@ This directory maps the maintainer-facing docs for Quickey.
 - [`handoff-notes.md`](./handoff-notes.md)
 - [`lessons-learned.md`](./lessons-learned.md)
 
+## Automation
+- [`loop-prompt.md`](./loop-prompt.md) — autonomous `/loop` iteration prompt
+- [`loop-job-guide.md`](./loop-job-guide.md) — how to run and manage loop jobs
+
 ## Historical and Process Docs
 - [`archive/`](./archive/)
 - [`superpowers/`](./superpowers/)
