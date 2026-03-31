@@ -10,7 +10,7 @@ In a Claude Code interactive session, run:
 /loop 30m /babysit-prs
 ```
 
-This schedules a recurring task that fires every 30 minutes. Each iteration follows the pipeline defined in the `babysit-prs` skill (`~/.claude/skills/babysit-prs/SKILL.md`).
+This schedules a recurring task that fires every 30 minutes. Each iteration follows the pipeline defined in the `babysit-prs` skill (`.claude/skills/babysit-prs/SKILL.md` in this repo).
 
 ## How /loop Works
 
@@ -38,7 +38,11 @@ Before relying on the loop job:
   - `/reload-plugins` after installing or enabling anything
   - `/code-review`, `/codex:review`, and `/simplify` should be treated as optional gates that must be present to run, not assumed silently
 
-The `babysit-prs` skill performs a Session Init check on its first iteration and caches tool availability for the session.
+The `babysit-prs` skill performs a Session Init check on its first iteration and caches tool availability for the session. On a fresh clone, symlink the skill into your user-level skills directory:
+
+```bash
+ln -s "$(pwd)/.claude/skills/babysit-prs" ~/.claude/skills/babysit-prs
+```
 
 ### Interval syntax
 

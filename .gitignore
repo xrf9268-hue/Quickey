@@ -7,6 +7,7 @@ build/
 *.d
 *.swiftdeps
 scripts/cgevent-helper
-.claude/
+.claude/*
+!.claude/skills/
 .worktrees/
 logs/
