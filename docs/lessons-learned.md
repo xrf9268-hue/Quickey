@@ -262,7 +262,7 @@ HID usage code 和 Carbon virtual key code 是两套完全不同的编码系统�
 The original loop job used `claude -p` (headless mode) with `--output-format stream-json --verbose`, producing unreadable JSON noise in terminal output.
 
 **Cause**
-Headless mode (`-p`) disables all interactive features: skills (`/review`, `/simplify`), clean output formatting, and session-level capabilities. The `stream-json` format dumps raw JSON with session_id, token statistics, and cost metadata on every line. Adding `--verbose` (required by `stream-json`) makes it worse. There is no output format option in `-p` mode that provides both real-time visibility and human readability.
+Headless mode (`-p`) disables all interactive features: skills (`/code-review`, `/simplify`), clean output formatting, and session-level capabilities. The `stream-json` format dumps raw JSON with session_id, token statistics, and cost metadata on every line. Adding `--verbose` (required by `stream-json`) makes it worse. There is no output format option in `-p` mode that provides both real-time visibility and human readability.
 
 **Practical guidance**
 Always use `/loop` for recurring automated work. `/loop` runs in interactive mode where skills work natively, output is clean, and no shell scripting infrastructure (tmux, stdbuf, tee, signal traps, circuit breakers) is needed. Example:
@@ -270,6 +270,22 @@ Always use `/loop` for recurring automated work. `/loop` runs in interactive mod
 ```
 /loop 30m Follow the instructions in docs/loop-prompt.md
 ```
+
+## Review Tool Behavior Differences in Loop Jobs
+
+**Issue**
+The three review tools have different output destinations. Treating them uniformly leads to missed findings or empty checks.
+
+**Cause**
+- `/code-review` ([code-review plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/code-review)) **posts PR comments** via `gh pr comment`. Findings use confidence scoring (≥80 threshold). Readable across iterations via `gh pr view --comments`.
+- `@chatgpt-codex-connector[bot]` (Codex Review) **posts PR comments** with P0/P1/P2 priority tags. Also readable via `gh pr view --comments`.
+- `/codex:review` ([Codex Plugin CC](https://github.com/openai/codex-plugin-cc)) outputs results **only within the Claude Code session**. Results live in session memory, not on the PR.
+
+**Practical guidance**
+- `/code-review` and bot reviews: check via `gh pr view <number> --comments` — works across iterations.
+- `/codex:review`: check session memory only. Session context persists across `/loop` iterations, but findings are not durable beyond the session.
+- After pushing code, the working tree is clean. Use `--base main` to review the branch diff: `/codex:review --base main --background`. Retrieve results with `/codex:status` + `/codex:result`.
+- Note: `/review` is **deprecated**. Use `/code-review` (requires plugin install: `claude plugin install code-review@claude-plugins-official`).
 
 ## Event Tap Timeout Recovery Needs Escalation
 
