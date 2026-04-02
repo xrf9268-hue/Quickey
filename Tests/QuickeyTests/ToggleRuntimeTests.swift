@@ -273,6 +273,101 @@ func pipelineEnabledRecoversFastLaneAfterQuarantineExpires() {
 }
 
 @Test @MainActor
+func pipelineEnabledDropsStaleHintsWhenPreviousBundleChanges() {
+    let cache = TapContextCache()
+    let runtime = ToggleRuntime(
+        configuration: ToggleRuntimeConfiguration(executionMode: .pipelineEnabled),
+        tapContextCache: cache
+    )
+
+    // Cache entry has Terminal as previous with specific PID/PSN/window hints
+    var terminalPSN = ProcessSerialNumber()
+    terminalPSN.highLongOfPSN = 1
+    terminalPSN.lowLongOfPSN = 42
+    let cachedContext = RestoreContext(
+        targetBundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.apple.Terminal",
+        previousPID: 100,
+        previousPSNHint: terminalPSN,
+        previousWindowIDHint: 999,
+        previousBundleURL: URL(fileURLWithPath: "/Applications/Terminal.app"),
+        capturedAt: 50,
+        generation: 1
+    )
+    cache.upsert(
+        targetBundleIdentifier: "com.apple.Safari",
+        coordinatorPreviousBundle: "com.apple.Terminal",
+        restoreContext: cachedContext
+    )
+
+    // Now call with a DIFFERENT previous bundle (Finder instead of Terminal)
+    let decision = runtime.decision(
+        targetBundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.apple.Finder",
+        classification: .regularWindowed,
+        attemptStartedAt: 100.0
+    )
+
+    if case .execute(.fastLane(let context)) = decision {
+        #expect(context.previousBundleIdentifier == "com.apple.Finder")
+        // Hints from Terminal cache entry must NOT leak into Finder context
+        #expect(context.previousPID == nil)
+        #expect(context.previousPSNHint == nil)
+        #expect(context.previousWindowIDHint == nil)
+        #expect(context.previousBundleURL == nil)
+    } else {
+        Issue.record("Expected fastLane decision, got \(decision)")
+    }
+}
+
+@Test @MainActor
+func pipelineEnabledKeepsHintsWhenPreviousBundleMatches() {
+    let cache = TapContextCache()
+    let runtime = ToggleRuntime(
+        configuration: ToggleRuntimeConfiguration(executionMode: .pipelineEnabled),
+        tapContextCache: cache
+    )
+
+    var terminalPSN = ProcessSerialNumber()
+    terminalPSN.highLongOfPSN = 1
+    terminalPSN.lowLongOfPSN = 42
+    let cachedContext = RestoreContext(
+        targetBundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.apple.Terminal",
+        previousPID: 100,
+        previousPSNHint: terminalPSN,
+        previousWindowIDHint: 999,
+        previousBundleURL: URL(fileURLWithPath: "/Applications/Terminal.app"),
+        capturedAt: 50,
+        generation: 1
+    )
+    cache.upsert(
+        targetBundleIdentifier: "com.apple.Safari",
+        coordinatorPreviousBundle: "com.apple.Terminal",
+        restoreContext: cachedContext
+    )
+
+    // Same previous bundle as cached — hints should be preserved
+    let decision = runtime.decision(
+        targetBundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.apple.Terminal",
+        classification: .regularWindowed,
+        attemptStartedAt: 100.0
+    )
+
+    if case .execute(.fastLane(let context)) = decision {
+        #expect(context.previousBundleIdentifier == "com.apple.Terminal")
+        #expect(context.previousPID == 100)
+        #expect(context.previousPSNHint?.highLongOfPSN == 1)
+        #expect(context.previousPSNHint?.lowLongOfPSN == 42)
+        #expect(context.previousWindowIDHint == 999)
+        #expect(context.previousBundleURL?.path == "/Applications/Terminal.app")
+    } else {
+        Issue.record("Expected fastLane decision, got \(decision)")
+    }
+}
+
+@Test @MainActor
 func runtimeInvariantsRejectSelfReferencingPreviousBundle() {
     #expect(
         normalizedPreviousBundle(
