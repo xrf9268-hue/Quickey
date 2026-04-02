@@ -10,7 +10,7 @@ In a Claude Code interactive session, run:
 /loop 30m /babysit-prs
 ```
 
-This schedules a recurring task that fires every 30 minutes. Each iteration follows the pipeline defined in the `babysit-prs` skill (`~/.claude/skills/babysit-prs/SKILL.md`).
+This schedules a recurring task that fires every 30 minutes. Each iteration follows the pipeline defined in the `babysit-prs` skill (`.claude/skills/babysit-prs/SKILL.md` in this repo).
 
 ## How /loop Works
 

@@ -8,7 +8,7 @@ This file is retained for reference. The active loop automation is now delivered
 /loop 30m /babysit-prs
 ```
 
-The skill lives at `~/.claude/skills/babysit-prs/SKILL.md` and uses progressive disclosure:
+The skill lives at `.claude/skills/babysit-prs/SKILL.md` (in this repo) and uses progressive disclosure:
 
 - `SKILL.md` — main pipeline: safety constraints, iteration guard, workflow steps
 - `references/review-gates.md` — three-tier review tool behavior and degraded-tooling rules
