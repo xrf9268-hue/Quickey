@@ -35,7 +35,7 @@ enum PipelineDecision: Equatable {
 @MainActor
 final class ToggleRuntime {
     let configuration: ToggleRuntimeConfiguration
-    private let tapContextCache: TapContextCache
+    let tapContextCache: TapContextCache
 
     init(
         configuration: ToggleRuntimeConfiguration = .init(),
