@@ -115,6 +115,8 @@ Max 3 fix-build-test cycles. If still failing → comment, **NEXT ITERATION**.
 
 **5c. Commit and create PR**:
 ```bash
+git add -A
+git commit -m "<type>: <concise description> (#<N>)"
 git push -u origin HEAD
 gh pr create --title "<title under 70 chars>" --body "$(cat <<'EOF'
 Closes #<N>
