@@ -80,13 +80,15 @@ final class ToggleRuntime {
             let cacheEntry = tapContextCache.entry(for: targetBundleIdentifier, now: attemptStartedAt)
             let fastLaneEligible = cacheEntry?.fastLaneEligible ?? true
 
+            let hintsMatch = normalizedPrevious != nil
+                && cacheEntry?.restoreContext.previousBundleIdentifier == normalizedPrevious
             let context = RestoreContext(
                 targetBundleIdentifier: targetBundleIdentifier,
                 previousBundleIdentifier: normalizedPrevious,
-                previousPID: cacheEntry?.restoreContext.previousPID,
-                previousPSNHint: cacheEntry?.restoreContext.previousPSNHint,
-                previousWindowIDHint: cacheEntry?.restoreContext.previousWindowIDHint,
-                previousBundleURL: cacheEntry?.restoreContext.previousBundleURL,
+                previousPID: hintsMatch ? cacheEntry?.restoreContext.previousPID : nil,
+                previousPSNHint: hintsMatch ? cacheEntry?.restoreContext.previousPSNHint : nil,
+                previousWindowIDHint: hintsMatch ? cacheEntry?.restoreContext.previousWindowIDHint : nil,
+                previousBundleURL: hintsMatch ? cacheEntry?.restoreContext.previousBundleURL : nil,
                 capturedAt: attemptStartedAt,
                 generation: cacheEntry?.restoreContext.generation ?? 0
             )
