@@ -14,8 +14,8 @@ Three review tools with different output destinations. Treating them uniformly l
 
 - **Invocation limit**: Max 2 invocations per tool per PR per iteration.
 - **Parallelization**: Fire `/codex:review --base main --background` first (async), then `/code-review` (sync), then check `/codex:status`.
-- **Must-fix**: `/code-review` ≥ 80 confidence, P0/P1 bot findings, critical `/codex:review` findings.
-- **Evaluate**: P2+ bot findings, minor `/codex:review` findings — fix if easy, otherwise comment why skipped.
+- **Must-fix**: `/code-review` ≥ 80 confidence, all bot findings (any priority), critical `/codex:review` findings. Only skip a finding if it is clearly a false positive or provides no actionable value — comment on the PR explaining the dismissal.
+- **Evaluate**: minor `/codex:review` findings — fix if easy, otherwise comment why skipped.
 
 ## Degraded Tooling
 

@@ -310,3 +310,30 @@ macOS can repeatedly disable the tap with `tapDisabledByTimeout`, which indicate
 
 **Practical guidance**
 Keep the callback path light and re-enable in place first, but track rolling timeout counts. In Quickey's current recovery ladder, the first timeout stays in-place, 3 timeouts within 30 seconds escalate to full recreation, and 2 recreation failures within 120 seconds mark the tap subsystem degraded. Recreate the tap on the same dedicated background RunLoop thread, using a reusable readiness mechanism so repeated add/remove/recreate cycles do not deadlock.
+
+## Codex Stop Hook Infinite Loop
+
+**Issue**
+The Codex plugin `Stop` hook (`stop-review-gate-hook.mjs`) enters an infinite loop when the Codex CLI is unavailable: hook fails, emits `decision: "block"`, Claude responds, Stop hook fires again, fails again, and repeats indefinitely.
+
+**Cause**
+`stop-review-gate-hook.mjs` always emits `block` when `runStopReview()` returns `status !== 0`, without distinguishing between "review found issues" and "Codex CLI infrastructure failure." When Codex cannot connect (unauthenticated, network issues, etc.), every Stop attempt is blocked, producing dozens of repeated error messages in the conversation.
+
+**Practical guidance**
+- When the Stop hook loops, temporarily disable `stopReviewGate`: edit `~/.claude/plugins/data/codex-openai-codex/state/<project>/state.json` and change `"stopReviewGate": true` to `false`.
+- The root fix belongs in the hook script: infrastructure failures (Codex CLI unavailable) should warn, not block.
+- Before enabling `stopReviewGate`, ensure `codex login` authentication is working.
+
+## babysit-prs Bot Review Findings Must All Block Merge
+
+**Issue**
+The babysit-prs merge criteria originally only checked P0/P1 bot review findings, allowing real bugs at lower priority levels to be merged without being fixed.
+
+**Cause**
+The merge condition read "No unresolved P0/P1 bot review findings", while Step 1c treated P2+ as "fix if easy, otherwise comment why skipped." This gap meant a lower-priority finding that was not fixed in Step 1c would not block the merge in Step 1a.
+
+**Practical guidance**
+- All bot review findings (any priority) now block merge (updated in skill.md and review-gates.md).
+- A finding may only be skipped if it is clearly a false positive or provides no actionable value — the dismissal must be explained in a PR comment.
+- If a real issue is found, fix it regardless of priority.
+- Example: PR #113 was merged with an unresolved P2 stale-cache-hints bug, requiring a follow-up fix in PR #114.

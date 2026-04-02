@@ -61,12 +61,12 @@ Process each PR in order: **1b → 1c → 1a**.
 
 **1b. CI failures**: Check `gh pr checks <number>`. Attempt fix (max 2 attempts). If still failing: add label `needs-human-review`, comment, move on. If you push a fix, leave the PR open for a later iteration.
 
-**1c. Review feedback**: Read `references/review-gates.md` for tool-specific rules. Read PR comments: `gh pr view <number> --comments`. Check session memory for `/codex:review` findings. High-confidence findings (≥80) and P0/P1: must-fix. P2+: fix if easy, otherwise comment why skipped. If a review tool is unavailable, comment that the gate was unavailable and leave the PR open.
+**1c. Review feedback**: Read `references/review-gates.md` for tool-specific rules. Read PR comments: `gh pr view <number> --comments`. Check session memory for `/codex:review` findings. All bot review findings (any priority) and high-confidence `/code-review` findings (≥80): must-fix. Only skip a finding if it is clearly a false positive or provides no actionable value — in that case, comment on the PR explaining why it was dismissed. If a review tool is unavailable, comment that the gate was unavailable and leave the PR open.
 
 **1a. Merge eligible**: A PR is eligible when ALL true:
 - CI passes
 - No unresolved high-confidence `/code-review` findings (≥80)
-- No unresolved P0/P1 bot review findings
+- No unresolved bot review findings (any priority)
 - No unresolved critical `/codex:review` findings in session memory
 - PR was NOT created or pushed to in this iteration
 - No `needs-human-review` or `arch-decision` label
