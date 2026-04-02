@@ -251,6 +251,25 @@ final class AppSwitcher: AppSwitching {
         )
         self.pendingActivationState = nil
         sessionCoordinator.markStable(for: bundleIdentifier)
+
+        // Seed the tap context cache so future toggle-off can track fast-lane misses.
+        // Without this upsert, markFastLaneMiss is a no-op (guard on existing entry).
+        let now = confirmationClient.now()
+        toggleRuntime.tapContextCache.upsert(
+            targetBundleIdentifier: bundleIdentifier,
+            coordinatorPreviousBundle: stableActivationState?.previousBundleIdentifier,
+            restoreContext: RestoreContext(
+                targetBundleIdentifier: bundleIdentifier,
+                previousBundleIdentifier: stableActivationState?.previousBundleIdentifier,
+                previousPID: nil,
+                previousPSNHint: nil,
+                previousWindowIDHint: nil,
+                previousBundleURL: nil,
+                capturedAt: now,
+                generation: generation
+            )
+        )
+
         return true
     }
 
@@ -445,55 +464,24 @@ final class AppSwitcher: AppSwitching {
             if let trackerPrevious = frontmostTracker.lastNonTargetBundleIdentifier, trackerPrevious != previousApp {
                 DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: RESTORE_DIVERGENCE resolvedPrevious=\(previousApp ?? "nil") trackerPrevious=\(trackerPrevious)")
             }
-            // 1. Hide the current app via AX first.  NSRunningApplication.hide()
-            //    returns false from an LSUIElement/accessory app on macOS 15, so we
-            //    use the Accessibility API (kAXHiddenAttribute) which works with
-            //    the existing Accessibility permission.  Hiding first forces macOS
-            //    to activate another app, making the subsequent SkyLight activation
-            //    of the specific previous app immediate.
-            let axTarget = AXUIElementCreateApplication(runningApp.processIdentifier)
-            let axHideResult = AXUIElementSetAttributeValue(
-                axTarget,
-                kAXHiddenAttribute as CFString,
-                kCFBooleanTrue as CFTypeRef
-            )
-            let hidden = (axHideResult == .success)
 
-            // 2. Activate the previous app via full three-layer SkyLight (same as
-            //    forward activation) so the correct app comes to front.
-            let restored: Bool
-            let restoredBundle: String?
-            if let prevBundle = previousApp,
-               let prevApp = NSRunningApplication.runningApplications(withBundleIdentifier: prevBundle).first {
-                restoredBundle = prevBundle
-                if prevApp.isHidden { prevApp.unhide() }
-                let prevWindows = applicationObservation.windowObservation(for: prevApp)
-                restored = activateViaWindowServer(prevApp, windows: prevWindows.windows)
-            } else {
-                let restoreAttempt = frontmostTracker.restorePreviousAppIfPossible()
-                restored = restoreAttempt.restoreAccepted
-                restoredBundle = restoreAttempt.bundleIdentifier
+            if case .execute(.fastLane) = runtimeDecision {
+                return performFastLaneToggle(
+                    shortcut: shortcut,
+                    runningApp: runningApp,
+                    previousApp: previousApp,
+                    preActionSnapshot: preActionSnapshot,
+                    attemptStartedAt: attemptStartedAt
+                )
             }
-            logger.info("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored), hidden=\(hidden)")
-            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored) (prev=\(restoredBundle ?? previousApp ?? "nil")), hidden=\(hidden)")
-            let postRestoreWindowObservation = applicationObservation.windowObservation(for: runningApp)
-            let postRestoreSnapshot = applicationObservation.snapshot(
-                for: runningApp,
-                windowObservation: postRestoreWindowObservation
-            )
-            if !postRestoreSnapshot.targetIsObservedFrontmost {
-                frontmostTracker.confirmRestoreAttempt()
-            }
-            clearActivationTracking(for: shortcut.bundleIdentifier, resetPreviousTracking: false)
-            logPostActionState(
+
+            return performCompatibilityToggle(
                 shortcut: shortcut,
-                phase: .postRestoreState,
-                snapshot: postRestoreSnapshot,
-                previousBundle: restoredBundle ?? previousApp,
-                activationPath: .restorePrevious,
-                elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+                runningApp: runningApp,
+                previousApp: previousApp,
+                preActionSnapshot: preActionSnapshot,
+                attemptStartedAt: attemptStartedAt
             )
-            return restored || hidden
         }
 
         // Target is already active and stable but wasn't tracked by us (e.g. restored
@@ -612,6 +600,183 @@ final class AppSwitcher: AppSwitching {
             }
         )
         return true
+    }
+
+    // MARK: - Toggle-off lanes
+
+    private struct RestorePreviousResult {
+        let restored: Bool
+        let restoredBundle: String?
+        let resolvedApp: NSRunningApplication?
+    }
+
+    /// Lookup, unhide, and activate the previous app via three-layer SkyLight.
+    /// Returns nil only when no previous bundle identifier is available.
+    private func restorePreviousApp(bundle: String?) -> RestorePreviousResult? {
+        guard let prevBundle = bundle,
+              let prevApp = NSRunningApplication.runningApplications(withBundleIdentifier: prevBundle).first else {
+            return nil
+        }
+        if prevApp.isHidden { prevApp.unhide() }
+        let prevWindows = applicationObservation.windowObservation(for: prevApp)
+        let restored = activateViaWindowServer(prevApp, windows: prevWindows.windows)
+        return RestorePreviousResult(restored: restored, restoredBundle: prevBundle, resolvedApp: prevApp)
+    }
+
+    /// Fast lane: restore previous app via SkyLight WITHOUT hiding the target first.
+    /// Uses ObservationBroker for 75ms cheap confirmation. On miss, falls back to
+    /// compatibility lane and tracks the miss in TapContextCache for quarantine.
+    private func performFastLaneToggle(
+        shortcut: AppShortcut,
+        runningApp: NSRunningApplication,
+        previousApp: String?,
+        preActionSnapshot: ActivationObservationSnapshot,
+        attemptStartedAt: CFAbsoluteTime
+    ) -> Bool {
+        let restoreResult = restorePreviousApp(bundle: previousApp)
+        guard let result = restoreResult, result.restored else {
+            let reason = restoreResult == nil ? "no previous app" : "restore failed"
+            DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: FAST_LANE \(reason), falling back to compatibility")
+            return performCompatibilityToggle(
+                shortcut: shortcut,
+                runningApp: runningApp,
+                previousApp: previousApp,
+                preActionSnapshot: preActionSnapshot,
+                attemptStartedAt: attemptStartedAt
+            )
+        }
+
+        let broker = ObservationBroker(
+            client: ObservationBroker.Client(
+                frontmostBundleIdentifier: { [weak self] in
+                    self?.frontmostTracker.currentFrontmostBundleIdentifier()
+                },
+                targetIsHidden: { runningApp.isHidden },
+                targetIsActive: { runningApp.isActive },
+                targetClassification: { preActionSnapshot.classification },
+                escalatedSnapshot: { [weak self] in
+                    guard let self else {
+                        return ActivationObservationSnapshot(
+                            targetBundleIdentifier: runningApp.bundleIdentifier,
+                            observedFrontmostBundleIdentifier: nil,
+                            targetIsActive: false,
+                            targetIsHidden: true,
+                            visibleWindowCount: 0,
+                            hasFocusedWindow: false,
+                            hasMainWindow: false,
+                            windowObservationSucceeded: false,
+                            windowObservationFailureReason: "appSwitcherReleased",
+                            classification: .windowlessOrAccessory,
+                            classificationReason: "app switcher released during fast lane confirmation"
+                        )
+                    }
+                    let windowObs = self.applicationObservation.windowObservation(for: runningApp)
+                    return self.applicationObservation.snapshot(for: runningApp, windowObservation: windowObs)
+                },
+                now: { [weak self] in
+                    self?.confirmationClient.now() ?? CFAbsoluteTimeGetCurrent()
+                },
+                pollOnce: { interval in
+                    RunLoop.main.run(until: Date(timeIntervalSinceNow: interval))
+                }
+            ),
+            confirmationWindow: toggleRuntime.configuration.fastConfirmationWindow
+        )
+
+        let confirmation = broker.confirmFastRestore(
+            targetBundleIdentifier: shortcut.bundleIdentifier,
+            previousBundleIdentifier: previousApp
+        )
+
+        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: FAST_LANE confirmed=\(confirmation.confirmed) escalated=\(confirmation.usedEscalatedObservation) frontmost=\(confirmation.frontmostBundleAfterRestore ?? "nil") elapsedMs=\(elapsedMilliseconds(since: attemptStartedAt))")
+
+        if confirmation.confirmed {
+            frontmostTracker.confirmRestoreAttempt()
+            clearActivationTracking(for: shortcut.bundleIdentifier, resetPreviousTracking: false)
+            let postRestoreWindowObservation = applicationObservation.windowObservation(for: runningApp)
+            let postRestoreSnapshot = applicationObservation.snapshot(
+                for: runningApp,
+                windowObservation: postRestoreWindowObservation
+            )
+            logPostActionState(
+                shortcut: shortcut,
+                phase: .postRestoreState,
+                snapshot: postRestoreSnapshot,
+                previousBundle: result.restoredBundle,
+                activationPath: .restorePrevious,
+                elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+            )
+            return true
+        }
+
+        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: FAST_LANE_MISS → falling back to compatibility")
+        toggleRuntime.tapContextCache.markFastLaneMiss(
+            for: shortcut.bundleIdentifier,
+            now: confirmationClient.now(),
+            threshold: toggleRuntime.configuration.fastLaneMissThreshold,
+            window: toggleRuntime.configuration.fastLaneMissWindow,
+            quarantine: toggleRuntime.configuration.temporaryCompatibilityWindow
+        )
+
+        return performCompatibilityToggle(
+            shortcut: shortcut,
+            runningApp: runningApp,
+            previousApp: previousApp,
+            preActionSnapshot: preActionSnapshot,
+            attemptStartedAt: attemptStartedAt
+        )
+    }
+
+    /// Compatibility lane: hide the target via AX first, then restore the previous app
+    /// via SkyLight three-layer activation. This is the original toggle-off behavior.
+    private func performCompatibilityToggle(
+        shortcut: AppShortcut,
+        runningApp: NSRunningApplication,
+        previousApp: String?,
+        preActionSnapshot: ActivationObservationSnapshot,
+        attemptStartedAt: CFAbsoluteTime
+    ) -> Bool {
+        // AX hide instead of NSRunningApplication.hide() — the latter returns false
+        // from LSUIElement/accessory apps on macOS 15. Hiding first forces macOS to
+        // activate another app, making SkyLight activation of the previous app immediate.
+        let axTarget = AXUIElementCreateApplication(runningApp.processIdentifier)
+        let axHideResult = AXUIElementSetAttributeValue(
+            axTarget,
+            kAXHiddenAttribute as CFString,
+            kCFBooleanTrue as CFTypeRef
+        )
+        let hidden = (axHideResult == .success)
+
+        let restored: Bool
+        let restoredBundle: String?
+        if let result = restorePreviousApp(bundle: previousApp) {
+            restored = result.restored
+            restoredBundle = result.restoredBundle
+        } else {
+            let restoreAttempt = frontmostTracker.restorePreviousAppIfPossible()
+            restored = restoreAttempt.restoreAccepted
+            restoredBundle = restoreAttempt.bundleIdentifier
+        }
+        logger.info("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored), hidden=\(hidden)")
+        DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: IS ACTIVE → restored=\(restored) (prev=\(restoredBundle ?? previousApp ?? "nil")), hidden=\(hidden)")
+        let postRestoreWindowObservation = applicationObservation.windowObservation(for: runningApp)
+        let postRestoreSnapshot = applicationObservation.snapshot(
+            for: runningApp,
+            windowObservation: postRestoreWindowObservation
+        )
+        if !postRestoreSnapshot.targetIsObservedFrontmost {
+            frontmostTracker.confirmRestoreAttempt()
+        }
+        clearActivationTracking(for: shortcut.bundleIdentifier, resetPreviousTracking: false)
+        logPostActionState(
+            shortcut: shortcut,
+            phase: .postRestoreState,
+            snapshot: postRestoreSnapshot,
+            previousBundle: restoredBundle ?? previousApp,
+            activationPath: .restorePrevious,
+            elapsedMilliseconds: elapsedMilliseconds(since: attemptStartedAt)
+        )
+        return restored || hidden
     }
 
     // MARK: - Three-layer activation (reference: alt-tab-macos)
