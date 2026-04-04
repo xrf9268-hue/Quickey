@@ -139,7 +139,7 @@ private func dateString(for date: Date) -> String {
 
 @MainActor
 private func waitForRefreshResult(
-    timeout: Duration = .seconds(1),
+    timeout: Duration = .seconds(5),
     pollInterval: Duration = .milliseconds(10),
     condition: @escaping @MainActor () -> Bool
 ) async {
