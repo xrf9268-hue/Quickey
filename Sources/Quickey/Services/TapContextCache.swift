@@ -12,9 +12,6 @@ final class TapContextCache {
     struct Entry {
         var restoreContext: RestoreContext
         var fastLaneEligible: Bool
-        var fastLaneMissCount: Int
-        var fastLaneMissWindowStart: CFAbsoluteTime?
-        var temporaryCompatibilityUntil: CFAbsoluteTime?
         var lastInvalidationReason: CacheInvalidationReason?
     }
 
@@ -34,9 +31,6 @@ final class TapContextCache {
         var entry = entries[targetBundleIdentifier] ?? Entry(
             restoreContext: restoreContext,
             fastLaneEligible: true,
-            fastLaneMissCount: 0,
-            fastLaneMissWindowStart: nil,
-            temporaryCompatibilityUntil: nil,
             lastInvalidationReason: nil
         )
         entry.restoreContext = RestoreContext(
@@ -47,43 +41,15 @@ final class TapContextCache {
             capturedAt: restoreContext.capturedAt,
             generation: restoreContext.generation
         )
-        entry.fastLaneEligible = entry.temporaryCompatibilityUntil == nil
         entry.lastInvalidationReason = nil
         entries[targetBundleIdentifier] = entry
         invalidationReasons.removeValue(forKey: targetBundleIdentifier)
         return entry
     }
 
-    func markFastLaneMiss(
-        for targetBundleIdentifier: String,
-        now: CFAbsoluteTime,
-        threshold: Int,
-        window: TimeInterval,
-        quarantine: TimeInterval
-    ) {
+    func markFastLaneMiss(for targetBundleIdentifier: String) {
         guard var entry = entries[targetBundleIdentifier] else { return }
-
-        if let temporaryCompatibilityUntil = entry.temporaryCompatibilityUntil,
-           now >= temporaryCompatibilityUntil {
-            entry.temporaryCompatibilityUntil = nil
-            entry.fastLaneEligible = true
-            entry.fastLaneMissCount = 0
-            entry.fastLaneMissWindowStart = nil
-        }
-
-        if let windowStart = entry.fastLaneMissWindowStart,
-           now - windowStart <= window {
-            entry.fastLaneMissCount += 1
-        } else {
-            entry.fastLaneMissWindowStart = now
-            entry.fastLaneMissCount = 1
-        }
-
-        if entry.fastLaneMissCount >= threshold {
-            entry.fastLaneEligible = false
-            entry.temporaryCompatibilityUntil = now + quarantine
-        }
-
+        entry.fastLaneEligible = false
         entries[targetBundleIdentifier] = entry
     }
 
@@ -101,19 +67,8 @@ final class TapContextCache {
         }
     }
 
-    func entry(for targetBundleIdentifier: String, now: CFAbsoluteTime) -> Entry? {
-        guard var entry = entries[targetBundleIdentifier] else { return nil }
-
-        if let temporaryCompatibilityUntil = entry.temporaryCompatibilityUntil,
-           now >= temporaryCompatibilityUntil {
-            entry.temporaryCompatibilityUntil = nil
-            entry.fastLaneEligible = true
-            entry.fastLaneMissCount = 0
-            entry.fastLaneMissWindowStart = nil
-            entries[targetBundleIdentifier] = entry
-        }
-
-        return entry
+    func entry(for targetBundleIdentifier: String) -> Entry? {
+        entries[targetBundleIdentifier]
     }
 
     func lastInvalidationReason(for targetBundleIdentifier: String) -> CacheInvalidationReason? {

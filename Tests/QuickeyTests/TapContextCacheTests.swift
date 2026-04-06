@@ -25,7 +25,7 @@ func coordinatorPreviousBundleWinsWhenCacheMirrorDrifts() {
     )
 
     #expect(entry.restoreContext.previousBundleIdentifier == "com.apple.Terminal")
-    #expect(cache.entry(for: "com.apple.Safari", now: 100)?.restoreContext.previousBundleIdentifier == "com.apple.Terminal")
+    #expect(cache.entry(for: "com.apple.Safari")?.restoreContext.previousBundleIdentifier == "com.apple.Terminal")
 }
 
 @Test @MainActor
@@ -52,7 +52,7 @@ func cacheInvalidatesWhenPreviousAppTerminates() {
 
     cache.invalidate("com.apple.Safari", reason: .previousAppTerminated)
 
-    #expect(cache.entry(for: "com.apple.Safari", now: 101) == nil)
+    #expect(cache.entry(for: "com.apple.Safari") == nil)
     #expect(cache.lastInvalidationReason(for: "com.apple.Safari") == .previousAppTerminated)
 }
 
@@ -76,7 +76,7 @@ func frontmostChangePreservesRestoreContextButDisablesFastLane() {
 
     cache.invalidate("com.apple.Safari", reason: .frontmostChanged)
 
-    let retainedEntry = cache.entry(for: "com.apple.Safari", now: 101)
+    let retainedEntry = cache.entry(for: "com.apple.Safari")
     #expect(retainedEntry?.restoreContext.previousBundleIdentifier == "com.apple.Terminal")
     #expect(retainedEntry?.fastLaneEligible == false)
     #expect(retainedEntry?.lastInvalidationReason == .frontmostChanged)
@@ -84,7 +84,7 @@ func frontmostChangePreservesRestoreContextButDisablesFastLane() {
 }
 
 @Test @MainActor
-func threeFastLaneMissesEnterTemporaryCompatibilityWindow() {
+func singleFastLaneMissPermanentlyDisablesFastLane() {
     let cache = TapContextCache()
     let restoreContext = RestoreContext(
         targetBundleIdentifier: "com.apple.Safari",
@@ -101,35 +101,46 @@ func threeFastLaneMissesEnterTemporaryCompatibilityWindow() {
         restoreContext: restoreContext
     )
 
-    cache.markFastLaneMiss(
-        for: "com.apple.Safari",
-        now: 100,
-        threshold: 3,
-        window: 600,
-        quarantine: 300
-    )
-    cache.markFastLaneMiss(
-        for: "com.apple.Safari",
-        now: 120,
-        threshold: 3,
-        window: 600,
-        quarantine: 300
-    )
-    cache.markFastLaneMiss(
-        for: "com.apple.Safari",
-        now: 140,
-        threshold: 3,
-        window: 600,
-        quarantine: 300
+    let entryBefore = cache.entry(for: "com.apple.Safari")
+    #expect(entryBefore?.fastLaneEligible == true)
+
+    cache.markFastLaneMiss(for: "com.apple.Safari")
+
+    let entryAfter = cache.entry(for: "com.apple.Safari")
+    #expect(entryAfter?.fastLaneEligible == false)
+    // Remains disabled — no auto-recovery
+    #expect(entryAfter?.restoreContext.previousBundleIdentifier == "com.apple.Terminal")
+}
+
+@Test @MainActor
+func sessionResetRestoresFastLaneEligibility() {
+    let cache = TapContextCache()
+    let restoreContext = RestoreContext(
+        targetBundleIdentifier: "com.apple.Safari",
+        previousBundleIdentifier: "com.apple.Terminal",
+        previousPID: 42,
+        previousBundleURL: URL(fileURLWithPath: "/Applications/Terminal.app"),
+        capturedAt: 100,
+        generation: 1
     )
 
-    let quarantinedEntry = cache.entry(for: "com.apple.Safari", now: 141)
-    #expect(quarantinedEntry?.temporaryCompatibilityUntil == 440)
-    #expect(quarantinedEntry?.fastLaneEligible == false)
+    cache.upsert(
+        targetBundleIdentifier: "com.apple.Safari",
+        coordinatorPreviousBundle: "com.apple.Terminal",
+        restoreContext: restoreContext
+    )
 
-    let recoveredEntry = cache.entry(for: "com.apple.Safari", now: 441)
-    #expect(recoveredEntry?.temporaryCompatibilityUntil == nil)
-    #expect(recoveredEntry?.fastLaneEligible == true)
-    #expect(recoveredEntry?.fastLaneMissCount == 0)
-    #expect(recoveredEntry?.fastLaneMissWindowStart == nil)
+    cache.markFastLaneMiss(for: "com.apple.Safari")
+    #expect(cache.entry(for: "com.apple.Safari")?.fastLaneEligible == false)
+
+    // Session reset clears the entry entirely — next upsert starts fresh with fastLaneEligible=true
+    cache.invalidate("com.apple.Safari", reason: .sessionReset)
+    #expect(cache.entry(for: "com.apple.Safari") == nil)
+
+    let freshEntry = cache.upsert(
+        targetBundleIdentifier: "com.apple.Safari",
+        coordinatorPreviousBundle: "com.apple.Terminal",
+        restoreContext: restoreContext
+    )
+    #expect(freshEntry.fastLaneEligible == true)
 }

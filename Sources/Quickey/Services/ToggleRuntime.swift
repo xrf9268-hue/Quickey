@@ -10,9 +10,6 @@ struct ToggleRuntimeConfiguration: Sendable, Equatable {
     var executionMode: ToggleExecutionMode = .legacyOnly
     var fastConfirmationWindow: TimeInterval = 0.075
     var contextPreparationConcurrencyLimit: Int = 2
-    var fastLaneMissThreshold: Int = 3
-    var fastLaneMissWindow: TimeInterval = 600
-    var temporaryCompatibilityWindow: TimeInterval = 300
 }
 
 enum ToggleRuntimeDecision: Equatable {
@@ -60,7 +57,7 @@ final class ToggleRuntime {
                 targetBundleIdentifier: targetBundleIdentifier,
                 previousBundleIdentifier: previousBundleIdentifier
             )
-            let cacheEntry = tapContextCache.entry(for: targetBundleIdentifier, now: attemptStartedAt)
+            let cacheEntry = tapContextCache.entry(for: targetBundleIdentifier)
             let fastLaneEligible = cacheEntry?.fastLaneEligible ?? true
             let wouldUseFastLane = fastLaneEligible
                 && normalizedPrevious != nil
@@ -77,7 +74,7 @@ final class ToggleRuntime {
                 targetBundleIdentifier: targetBundleIdentifier,
                 previousBundleIdentifier: previousBundleIdentifier
             )
-            let cacheEntry = tapContextCache.entry(for: targetBundleIdentifier, now: attemptStartedAt)
+            let cacheEntry = tapContextCache.entry(for: targetBundleIdentifier)
             let fastLaneEligible = cacheEntry?.fastLaneEligible ?? true
 
             let hintsMatch = normalizedPrevious != nil
