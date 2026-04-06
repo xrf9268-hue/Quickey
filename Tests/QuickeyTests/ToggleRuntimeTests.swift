@@ -28,9 +28,6 @@ func toggleRuntimeConfigurationDefaultsToLegacyMode() {
     #expect(configuration.executionMode == .legacyOnly)
     #expect(configuration.fastConfirmationWindow == 0.075)
     #expect(configuration.contextPreparationConcurrencyLimit == 2)
-    #expect(configuration.fastLaneMissThreshold == 3)
-    #expect(configuration.fastLaneMissWindow == 600)
-    #expect(configuration.temporaryCompatibilityWindow == 300)
 }
 
 @Test @MainActor
@@ -199,10 +196,8 @@ func pipelineEnabledRespectsQuarantinedCacheEntry() {
         coordinatorPreviousBundle: "com.apple.Terminal",
         restoreContext: restoreContext
     )
-    // 3 misses → quarantine
-    for t in stride(from: 100.0, through: 140.0, by: 20.0) {
-        cache.markFastLaneMiss(for: "com.apple.Safari", now: t, threshold: 3, window: 600, quarantine: 300)
-    }
+    // Single miss → permanently ineligible
+    cache.markFastLaneMiss(for: "com.apple.Safari")
 
     let decision = runtime.decision(
         targetBundleIdentifier: "com.apple.Safari",
@@ -212,14 +207,14 @@ func pipelineEnabledRespectsQuarantinedCacheEntry() {
     )
 
     if case .execute(.compatibilityLane) = decision {
-        // expected: quarantined, so not fast-lane eligible
+        // expected: miss marked, so not fast-lane eligible
     } else {
-        Issue.record("Expected compatibilityLane for quarantined app, got \(decision)")
+        Issue.record("Expected compatibilityLane for miss-marked app, got \(decision)")
     }
 }
 
 @Test @MainActor
-func pipelineEnabledRecoversFastLaneAfterQuarantineExpires() {
+func pipelineEnabledRecoversFastLaneAfterSessionReset() {
     let cache = TapContextCache()
     let runtime = ToggleRuntime(
         configuration: ToggleRuntimeConfiguration(executionMode: .pipelineEnabled),
@@ -239,22 +234,27 @@ func pipelineEnabledRecoversFastLaneAfterQuarantineExpires() {
         coordinatorPreviousBundle: "com.apple.Terminal",
         restoreContext: restoreContext
     )
-    for t in stride(from: 100.0, through: 140.0, by: 20.0) {
-        cache.markFastLaneMiss(for: "com.apple.Safari", now: t, threshold: 3, window: 600, quarantine: 300)
-    }
+    cache.markFastLaneMiss(for: "com.apple.Safari")
 
-    // After quarantine expires (140 + 300 = 440)
+    // Session reset clears the entry; re-upsert starts fresh
+    cache.invalidate("com.apple.Safari", reason: .sessionReset)
+    cache.upsert(
+        targetBundleIdentifier: "com.apple.Safari",
+        coordinatorPreviousBundle: "com.apple.Terminal",
+        restoreContext: restoreContext
+    )
+
     let decision = runtime.decision(
         targetBundleIdentifier: "com.apple.Safari",
         previousBundleIdentifier: "com.apple.Terminal",
         classification: .regularWindowed,
-        attemptStartedAt: 441.0
+        attemptStartedAt: 200.0
     )
 
     if case .execute(.fastLane) = decision {
-        // expected: quarantine expired, fast lane recovered
+        // expected: session reset restored fast lane eligibility
     } else {
-        Issue.record("Expected fastLane after quarantine expired, got \(decision)")
+        Issue.record("Expected fastLane after session reset, got \(decision)")
     }
 }
 

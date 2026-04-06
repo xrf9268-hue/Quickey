@@ -709,13 +709,7 @@ final class AppSwitcher: AppSwitching {
         }
 
         DiagnosticLog.log("TOGGLE[\(shortcut.appName)]: FAST_LANE_MISS lane=fast fallbackCount=1 cacheInvalidationReason=\(cacheInvalidationReason ?? "nil") elapsedMs=\(elapsedMilliseconds(since: attemptStartedAt))")
-        toggleRuntime.tapContextCache.markFastLaneMiss(
-            for: shortcut.bundleIdentifier,
-            now: confirmationClient.now(),
-            threshold: toggleRuntime.configuration.fastLaneMissThreshold,
-            window: toggleRuntime.configuration.fastLaneMissWindow,
-            quarantine: toggleRuntime.configuration.temporaryCompatibilityWindow
-        )
+        toggleRuntime.tapContextCache.markFastLaneMiss(for: shortcut.bundleIdentifier)
 
         return performCompatibilityToggle(
             shortcut: shortcut,
