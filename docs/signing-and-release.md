@@ -146,8 +146,10 @@ For teams that do not yet have a `Developer ID Application` certificate, Quickey
 - builds and tests Quickey on `macos-15`
 - packages `build/Quickey-<version>.dmg`
 - uploads an Actions artifact named `Quickey-<version>-internal-<ref>`
+- refreshes a single rolling GitHub prerelease at `internal-downloads` with the latest internal DMG
 
 The internal package path is for trusted testers only. It does not perform Developer ID signing, notarization, stapling, or GitHub Release publication.
+Use the prerelease page when you want a stable download URL that behaves more like a GitHub Release than an Actions artifact.
 
 ## Manual Release Checklist
 

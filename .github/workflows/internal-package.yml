@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.package_ref || github.ref }}
@@ -59,8 +59,13 @@ jobs:
             SAFE_REF="ref"
           fi
 
+          INTERNAL_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/internal-downloads"
+
           echo "DMG_PATH=build/Quickey-${VERSION}.dmg" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=Quickey-${VERSION}-internal-${SAFE_REF}" >> "$GITHUB_ENV"
+          echo "SOURCE_REF=$SOURCE_REF" >> "$GITHUB_ENV"
+          echo "PACKAGE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "INTERNAL_RELEASE_URL=$INTERNAL_RELEASE_URL" >> "$GITHUB_ENV"
 
       - name: Verify internal DMG
         run: test -f "$DMG_PATH"
@@ -76,6 +81,35 @@ jobs:
           compression-level: 0
           archive: false
 
+      - name: Publish rolling internal prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES_FILE="$RUNNER_TEMP/internal-downloads-notes.md"
+
+          cat > "$NOTES_FILE" <<EOF
+          Internal-only Quickey build for trusted testers.
+
+          - Source ref: \`$SOURCE_REF\`
+          - Commit: \`$PACKAGE_SHA\`
+          - Artifact: \`$ARTIFACT_NAME\`
+          - DMG: \`$(basename "$DMG_PATH")\`
+
+          This prerelease is unsigned for Developer ID distribution and is not notarized. Use it only for trusted internal testing.
+          EOF
+
+          if gh release view internal-downloads >/dev/null 2>&1; then
+            gh release delete internal-downloads --cleanup-tag --yes
+          fi
+
+          gh release create internal-downloads \
+            "$DMG_PATH#Quickey Internal DMG" \
+            --prerelease \
+            --latest=false \
+            --title "Internal Downloads" \
+            --notes-file "$NOTES_FILE" \
+            --target "$PACKAGE_SHA"
+
       - name: Summarize internal package
         run: |
           {
@@ -84,6 +118,7 @@ jobs:
             echo "Artifact: \`$ARTIFACT_NAME\`"
             echo "DMG path: \`$DMG_PATH\`"
             echo "Download: [Open artifact](${{ steps.upload.outputs.artifact-url }})"
+            echo "Internal prerelease: [Open internal-downloads]($INTERNAL_RELEASE_URL)"
             echo
             echo "This artifact is intended for internal testing only. It is not Developer ID signed or notarized."
           } >> "$GITHUB_STEP_SUMMARY"
