@@ -66,13 +66,15 @@ jobs:
         run: test -f "$DMG_PATH"
 
       - name: Upload internal DMG artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: upload
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.DMG_PATH }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+          archive: false
 
       - name: Summarize internal package
         run: |
@@ -81,6 +83,7 @@ jobs:
             echo
             echo "Artifact: \`$ARTIFACT_NAME\`"
             echo "DMG path: \`$DMG_PATH\`"
+            echo "Download: [Open artifact](${{ steps.upload.outputs.artifact-url }})"
             echo
             echo "This artifact is intended for internal testing only. It is not Developer ID signed or notarized."
           } >> "$GITHUB_STEP_SUMMARY"
