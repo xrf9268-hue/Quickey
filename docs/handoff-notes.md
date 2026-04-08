@@ -3,13 +3,14 @@
 ## Current State
 Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-04-08, the shortcut-capture and toggle runtime were further refactored: standard shortcuts now use Carbon hotkeys, Hyper-dependent shortcuts remain on the active event tap, activation now defaults to front-process-only before escalating observation-driven window recovery, and toggle-off now uses `NSRunningApplication.hide()` with asynchronous confirmation. On 2026-04-08, targeted macOS re-validation was completed for the redesigned Safari/Hyper paths: Safari toggle-on/toggle-off now works again, Hyper-routed shortcuts survive fresh relaunches, and the post-fix runtime window shows `TOGGLE_HIDE_CONFIRMED` without new `TOGGLE_DEGRADED`, `hide_untracked`, event-tap-disable, or shortcut-capture resync-storm signatures. Broader app-matrix validation is still pending. A signed and notarized distributable is still unresolved.
 On 2026-04-08, launch-at-login presentation was hardened so `SMAppService.Status.notFound` is no longer always treated as a packaging failure: when Quickey is running outside `/Applications` or `~/Applications`, the General tab now shows install-location guidance instead of the red bundle-misconfiguration warning.
-On 2026-04-08, local DMG packaging and a tag-driven GitHub release workflow were added. The repo can now build `build/Quickey-<version>.dmg` locally and defines the credential-backed notarization/publish path, but the full Developer ID plus notarization flow still needs real-secret validation on macOS.
+On 2026-04-08, local DMG packaging and a tag-driven GitHub release workflow were added. The repo can now build `build/Quickey-<version>.dmg` locally and defines the credential-backed notarization/publish path. On 2026-04-08, the release workflow was further hardened to preflight required signing/notarization secrets and skip cleanly with a summary when Developer ID credentials are absent, and a separate internal-package workflow was added to upload unsigned DMG artifacts for trusted testers.
 
 ## Automated Verification (2026-04-08)
 - `swift test` passed after the DMG packaging and release workflow changes; the suite reported 173 tests passed
 - `swift build` passed after the refactor
 - `./scripts/package-app.sh` passed after the refactor, rebuilt `build/Quickey.app`, and re-signed it with the local `Quickey` identity
 - `./scripts/package-dmg.sh` passed and produced `build/Quickey-0.2.0.dmg`
+- Workflow regression checks passed for release preflight gating, manual `release_tag` dispatch, and internal-package artifact upload wiring
 
 ## Validated on macOS
 - Broad real-device validation completed on macOS 15.3.1 on 2026-03-20
@@ -69,6 +70,7 @@ On 2026-04-08, local DMG packaging and a tag-driven GitHub release workflow were
 - Insights date-window and refresh-race fixes
 - Signed/notarized distributable workflow once a Developer ID certificate is available
 - Credential-backed validation of `.github/workflows/release.yml`, including certificate import, notarization, stapling, `spctl`, and GitHub Release upload
+- Internal-package workflow download/install validation on a clean macOS machine
 
 ## Operational Caveats
 - Standard shortcuts require Accessibility plus successful Carbon registration; Hyper shortcuts additionally require Input Monitoring plus a successfully started active event tap
@@ -81,11 +83,12 @@ On 2026-04-08, local DMG packaging and a tag-driven GitHub release workflow were
 ## Residual Risks
 - The new capture split and toggle guarantees are covered by code-level tests and by the automated suite, but they still need the targeted macOS matrix above before we can claim runtime correctness for Safari-only toggle-off, standard-vs-Hyper parity, Home, Clock, System Settings, or timeout-stress behavior
 - Event tap recovery semantics are implemented with thresholded escalation and degraded reporting, but a reproducible on-device timeout-stress run is still needed to confirm the live logs are operationally sufficient
-- Signed/notarized release validation is still blocked on Developer ID availability
+- Signed/notarized release validation is still blocked on Developer ID availability; until those credentials exist, only the internal-package DMG artifact path can be verified end-to-end
 
 ## Immediate Next Actions
 1. Expand the targeted macOS validation matrix from the now-confirmed Safari/Hyper relaunch paths to Finder, Terminal, Home, Clock, System Settings, hidden/minimized paths, and event-tap timeout stress
 2. Verify standard-shortcut vs Hyper parity on the same target apps beyond the already revalidated Safari/Hyper cases, and capture any remaining app-specific exceptions in this file
-3. Run the new DMG release workflow with real Developer ID and notary credentials on a `v*` tag
-4. Validate the published DMG on a clean macOS machine and confirm drag-install to `/Applications`
-5. Fold any new validation findings back into this note, not into the feature overview docs
+3. Use the internal-package workflow for tester-facing DMG artifacts until Developer ID credentials are available
+4. Run the DMG release workflow with real Developer ID and notary credentials on a `v*` tag once those credentials exist
+5. Validate the published DMG on a clean macOS machine and confirm drag-install to `/Applications`
+6. Fold any new validation findings back into this note, not into the feature overview docs

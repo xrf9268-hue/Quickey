@@ -104,6 +104,7 @@ The release workflow lives at [release.yml](/Users/yvan/developer/Quickey/.githu
 - or run the workflow manually from the default branch and provide an existing matching `release_tag` input
 
 The workflow fails if the Git tag does not match `CFBundleShortVersionString`.
+If the required Developer ID / notarization secrets are not configured, the workflow exits successfully with a summary that lists the missing secrets and publishes nothing.
 
 ### Required GitHub Secrets
 
@@ -117,6 +118,7 @@ The workflow fails if the Git tag does not match `CFBundleShortVersionString`.
 
 ### Release job flow
 
+0. Check whether all required release secrets are present
 1. Import the `Developer ID Application` certificate into a temporary keychain
 2. Run `swift test`
 3. Run `scripts/package-app.sh` in hardened runtime signing mode
@@ -127,7 +129,25 @@ The workflow fails if the Git tag does not match `CFBundleShortVersionString`.
 8. Validate the final DMG with `stapler validate` and `spctl --assess --type open`
 9. Create or update the GitHub Release and upload `Quickey-<version>.dmg`
 
-The workflow is fail-closed: if signing, notarization, stapling, or validation fails, no release asset is published.
+When secrets are present, the workflow is fail-closed: if signing, notarization, stapling, or validation fails, no release asset is published.
+When secrets are absent, the workflow reports the missing secrets and skips publication without failing the repository.
+
+## Internal Package Workflow
+
+For teams that do not yet have a `Developer ID Application` certificate, Quickey also defines [internal-package.yml](/Users/yvan/developer/Quickey/.github/workflows/internal-package.yml).
+
+### Trigger
+
+- push to `main`
+- or run the workflow manually and set `package_ref` to a branch, tag, or commit
+
+### Output
+
+- builds and tests Quickey on `macos-15`
+- packages `build/Quickey-<version>.dmg`
+- uploads an Actions artifact named `Quickey-<version>-internal-<ref>`
+
+The internal package path is for trusted testers only. It does not perform Developer ID signing, notarization, stapling, or GitHub Release publication.
 
 ## Manual Release Checklist
 
@@ -139,6 +159,8 @@ The workflow is fail-closed: if signing, notarization, stapling, or validation f
 6. If you need to rerun release automation manually, open `Release`, keep the branch on the default branch, and set `release_tag` to the existing `vX.Y.Z`
 7. Confirm the `Release` workflow succeeds
 8. Download the GitHub Release DMG and validate it on a clean macOS machine
+
+If the release workflow reports missing secrets instead of publishing, use the `Internal Package` workflow with `package_ref=vX.Y.Z` to generate an internal-only DMG artifact until Developer ID credentials are available.
 
 ## Validation Commands
 

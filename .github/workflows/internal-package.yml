@@ -1,0 +1,86 @@
+name: Internal Package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      package_ref:
+        description: Branch, tag, or commit to package for internal testing
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.package_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build Internal DMG Artifact
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.package_ref || github.ref }}
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Package app bundle
+        run: bash scripts/package-app.sh
+
+      - name: Package DMG
+        run: bash scripts/package-dmg.sh
+
+      - name: Resolve artifact metadata
+        env:
+          MANUAL_PACKAGE_REF: ${{ inputs.package_ref }}
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sources/Quickey/Resources/Info.plist)"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            SOURCE_REF="${MANUAL_PACKAGE_REF}"
+          else
+            SOURCE_REF="${GITHUB_REF_NAME}"
+          fi
+
+          SAFE_REF="$(printf '%s' "$SOURCE_REF" | tr '/[:space:]' '--' | tr -cd 'A-Za-z0-9._-')"
+          if [ -z "$SAFE_REF" ]; then
+            SAFE_REF="ref"
+          fi
+
+          echo "DMG_PATH=build/Quickey-${VERSION}.dmg" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=Quickey-${VERSION}-internal-${SAFE_REF}" >> "$GITHUB_ENV"
+
+      - name: Verify internal DMG
+        run: test -f "$DMG_PATH"
+
+      - name: Upload internal DMG artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.DMG_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Summarize internal package
+        run: |
+          {
+            echo "## Internal package ready"
+            echo
+            echo "Artifact: \`$ARTIFACT_NAME\`"
+            echo "DMG path: \`$DMG_PATH\`"
+            echo
+            echo "This artifact is intended for internal testing only. It is not Developer ID signed or notarized."
+          } >> "$GITHUB_STEP_SUMMARY"

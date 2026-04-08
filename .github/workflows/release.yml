@@ -19,8 +19,97 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-readiness:
+    name: Check release prerequisites
+    runs-on: ubuntu-latest
+    outputs:
+      release_ready: ${{ steps.check.outputs.release_ready }}
+      missing_secrets: ${{ steps.check.outputs.missing_secrets }}
+      release_ref: ${{ steps.resolve.outputs.release_ref }}
+    steps:
+      - name: Resolve requested release ref
+        id: resolve
+        env:
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            RELEASE_REF="${MANUAL_RELEASE_TAG}"
+          else
+            RELEASE_REF="${GITHUB_REF_NAME}"
+          fi
+
+          echo "release_ref=$RELEASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Check release secrets
+        id: check
+        env:
+          DEVELOPER_ID_APP_CERT_BASE64: ${{ secrets.DEVELOPER_ID_APP_CERT_BASE64 }}
+          DEVELOPER_ID_APP_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_APP_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          DEVELOPER_ID_APP_SIGNING_IDENTITY: ${{ secrets.DEVELOPER_ID_APP_SIGNING_IDENTITY }}
+          NOTARYTOOL_KEY: ${{ secrets.NOTARYTOOL_KEY }}
+          NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
+          NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
+        run: |
+          missing=()
+
+          for secret_name in \
+            DEVELOPER_ID_APP_CERT_BASE64 \
+            DEVELOPER_ID_APP_CERT_PASSWORD \
+            KEYCHAIN_PASSWORD \
+            DEVELOPER_ID_APP_SIGNING_IDENTITY \
+            NOTARYTOOL_KEY \
+            NOTARYTOOL_KEY_ID \
+            NOTARYTOOL_ISSUER
+          do
+            if [ -z "${!secret_name:-}" ]; then
+              missing+=("$secret_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "release_ready=true" >> "$GITHUB_OUTPUT"
+            echo "missing_secrets=" >> "$GITHUB_OUTPUT"
+          else
+            missing_csv="$(IFS=,; echo "${missing[*]}")"
+            echo "release_ready=false" >> "$GITHUB_OUTPUT"
+            echo "missing_secrets=$missing_csv" >> "$GITHUB_OUTPUT"
+          fi
+
+  release-unavailable:
+    name: Skip release without signing credentials
+    needs: release-readiness
+    if: ${{ needs.release-readiness.outputs.release_ready != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize skipped release
+        env:
+          RELEASE_REF: ${{ needs.release-readiness.outputs.release_ref }}
+          MISSING_SECRETS: ${{ needs.release-readiness.outputs.missing_secrets }}
+        run: |
+          echo "::notice title=Release skipped::Missing required release secrets: $MISSING_SECRETS"
+
+          {
+            echo "## Release skipped"
+            echo
+            echo "Quickey's formal release pipeline requires Developer ID signing and Apple notarization credentials."
+            echo "Those secrets are not configured in this repository, so no signed or notarized GitHub Release asset was published."
+            echo
+            echo "Missing secrets:"
+
+            IFS=',' read -r -a missing <<< "$MISSING_SECRETS"
+            for secret_name in "${missing[@]}"; do
+              echo "- \`$secret_name\`"
+            done
+
+            echo
+            echo "For an internal test build, run the \`Internal Package\` workflow with \`package_ref=$RELEASE_REF\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   release:
     name: Build, Notarize, and Publish DMG
+    needs: release-readiness
+    if: ${{ needs.release-readiness.outputs.release_ready == 'true' }}
     runs-on: macos-15
     timeout-minutes: 45
     steps:
