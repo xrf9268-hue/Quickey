@@ -101,7 +101,7 @@ The release workflow lives at [release.yml](/Users/yvan/developer/Quickey/.githu
 ### Trigger
 
 - push a tag named `v<CFBundleShortVersionString>`
-- or run the workflow manually from a matching `v*` tag ref
+- or run the workflow manually from the default branch and provide an existing matching `release_tag` input
 
 The workflow fails if the Git tag does not match `CFBundleShortVersionString`.
 
@@ -136,8 +136,9 @@ The workflow is fail-closed: if signing, notarization, stapling, or validation f
 3. Run `./scripts/package-app.sh`
 4. Run `./scripts/package-dmg.sh`
 5. Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`
-6. Confirm the `Release` workflow succeeds
-7. Download the GitHub Release DMG and validate it on a clean macOS machine
+6. If you need to rerun release automation manually, open `Release`, keep the branch on the default branch, and set `release_tag` to the existing `vX.Y.Z`
+7. Confirm the `Release` workflow succeeds
+8. Download the GitHub Release DMG and validate it on a clean macOS machine
 
 ## Validation Commands
 

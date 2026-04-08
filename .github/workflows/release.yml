@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish manually (for example v0.2.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -30,10 +35,34 @@ jobs:
           echo "CERT_PATH=$RUNNER_TEMP/quickey-developer-id.p12" >> "$GITHUB_ENV"
           echo "NOTARY_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
 
+      - name: Checkout manual release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *)
+              echo "Error: workflow_dispatch release_tag must start with 'v', got '$RELEASE_TAG'" >&2
+              exit 1
+              ;;
+          esac
+
+          git fetch --force --tags origin
+          git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null
+          git checkout --force "refs/tags/$RELEASE_TAG"
+
       - name: Resolve release metadata
+        env:
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sources/Quickey/Resources/Info.plist)"
-          RELEASE_TAG="${GITHUB_REF_NAME}"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            RELEASE_TAG="${MANUAL_RELEASE_TAG}"
+          else
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          fi
 
           case "$RELEASE_TAG" in
             v*) ;;
