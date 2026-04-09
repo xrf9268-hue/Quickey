@@ -5,7 +5,7 @@ Quickey was broadly validated on macOS 15.3.1 on 2026-03-20. On 2026-04-08, the 
 On 2026-04-09, toggle reliability recovery moved lifecycle ownership fully into `ToggleSessionCoordinator`: launch / activate / stable / deactivation state is now pid-aware, attempt-scoped, and no longer split between coordinator and `AppSwitcher`. Regular apps now require usable window evidence (`visibleWindowCount > 0` or focused/main-window evidence) before toggle-on can be recorded as stable success; only non-regular apps may succeed windowlessly. The same recovery also added attempt-linked `TOGGLE_TRACE_*` and accepted-trigger `SHORTCUT_TRACE_*` diagnostics so one log window can explain branch choice, reset reason, and confirmation outcome end-to-end.
 On 2026-04-08, launch-at-login presentation was hardened so `SMAppService.Status.notFound` is no longer always treated as a packaging failure: when Quickey is running outside `/Applications` or `~/Applications`, the General tab now shows install-location guidance instead of the red bundle-misconfiguration warning.
 On 2026-04-08, local DMG packaging and a tag-driven GitHub release workflow were added. The repo can now build `build/Quickey-<version>.dmg` locally and defines the credential-backed notarization/publish path. On 2026-04-08, the release workflow was further hardened to preflight required signing/notarization secrets and skip cleanly with a summary when Developer ID credentials are absent, and a separate internal-package workflow was added to upload unsigned DMG artifacts for trusted testers. The internal workflow now also maintains a stable `internal-downloads` tag-backed prerelease page with tester-facing install notes and the latest internal DMG asset, instead of deleting and recreating the release each run.
-On 2026-04-09, packaged-app runtime validation moved past the original TCC blocker after `build/Quickey.app` was re-added to Accessibility and Input Monitoring. Manual Safari validation on the packaged app now shows the owned launch / relaunch path attaching the launched process back to the same attempt (`TOGGLE_TRACE_SESSION ... event=launch_attached reason="launch_completion_process_lookup"`), frontmost-without-window states staying in visibility recovery (`TOGGLE_TRACE_CONFIRMATION ... event=awaiting_window_evidence`) until usable window evidence appears, and second press hiding cleanly via `TOGGLE_HIDE_CONFIRMED` instead of falling through to `hide_untracked`. A follow-up investigation also closed the apparent `carbon=false eventTap=true` mystery after restart: the persisted Safari shortcut in `~/Library/Application Support/Quickey/shortcuts.json` was Hyper-routed (`command` + `option` + `control` + `shift` + `s`) and `defaults read com.quickey.app hyperKeyEnabled` was `1`, so the packaged app was correctly running through the event-tap path. The earlier assumption that Carbon readiness had drifted was incorrect, and `AppController` now reapplies the persisted Hyper state before `ShortcutManager.start()` so the very first readiness snapshot matches the real active transport.
+On 2026-04-09, packaged-app runtime validation moved past the original TCC blocker after `build/Quickey.app` was re-added to Accessibility and Input Monitoring. Manual Safari validation on the packaged app now shows the owned launch / relaunch path attaching the launched process back to the same attempt (`TOGGLE_TRACE_SESSION ... event=launch_attached reason="launch_completion_process_lookup"`), frontmost-without-window states staying in visibility recovery (`TOGGLE_TRACE_CONFIRMATION ... event=awaiting_window_evidence`) until usable window evidence appears, and second press hiding cleanly via `TOGGLE_HIDE_CONFIRMED` instead of falling through to `hide_untracked`. A follow-up investigation also closed the earlier `carbon=false eventTap=true` mystery after restart: at that point Safari itself was Hyper-routed, so the event-tap path was the correct transport. The current local fixture has since moved to a mixed transport setup (`command + shift + s` for Safari plus a Hyper-routed IINA shortcut), and the latest packaged-app verification now shows `checkPermission: ax=true im=true carbon=true eventTap=true` together with clean `TOGGLE_STABLE` / `TOGGLE_HIDE_CONFIRMED` chains and no fresh degraded/session-reset signatures in the recent log window.
 
 ## Automated Verification
 
@@ -21,7 +21,8 @@ On 2026-04-09, packaged-app runtime validation moved past the original TCC block
 - `codesign --verify --deep --strict --verbose=2 build/Quickey.app` passed
 - `bash scripts/e2e-full-test.sh` failed at packaged-app runtime preflight because TCC was not granted for `build/Quickey.app` in this environment (`trusted=false`, `ax=false`, `im=false`, event tap never started)
 - a follow-up packaged-app spot-check validated standard external activation against the current `command + shift + s` Safari shortcut: `MATCHED`, `TOGGLE_TRACE_DECISION event=hide_untracked`, `TOGGLE_HIDE_UNTRACKED`, `HIDE_REQUEST`, and `TOGGLE_HIDE_CONFIRMED` all appeared with the same non-nil `attemptId` / `pid` / `phase`
-- after the E2E harness was updated to use transport-aware readiness plus config-aware module skips, `bash scripts/e2e-full-test.sh` passed on the current local shortcut fixture with 1 warning (`Hyper Key (CGEvent hold)` skipped because the IINA Hyper shortcut is not configured)
+- after the E2E harness was updated to use transport-aware readiness plus config-aware module skips, `bash scripts/e2e-full-test.sh` passed on the local fixture
+- with the current mixed saved fixture (`Safari` standard + `IINA` Hyper), `bash scripts/e2e-full-test.sh` passed with `6/6 PASS` and `0 warnings`
 
 ### 2026-04-08
 - `swift test` passed after the DMG packaging and release workflow changes; the suite reported 173 tests passed
@@ -51,6 +52,9 @@ On 2026-04-09, packaged-app runtime validation moved past the original TCC block
   - externally fronting Safari, then triggering the standard shortcut, produced `MATCHED`, `TOGGLE_TRACE_DECISION event=hide_untracked`, `TOGGLE_HIDE_UNTRACKED`, `HIDE_REQUEST`, and `TOGGLE_HIDE_CONFIRMED`
   - the very first `hide_untracked` trace and lifecycle lines now carried the same non-nil `attemptId`, `pid`, and `phase=deactivating` as the later hide request / confirmation lines, confirming that the coordinator-owned deactivation session is allocated before logging that branch
 - On 2026-04-09, the frontmost/no-window policy was also observed live on Safari: Quickey logged `awaiting_window_evidence` and recovery stages while Safari was frontmost without usable window evidence, and only promoted to stable once visible/focused/main-window evidence appeared
+- On 2026-04-09, a later mixed-transport validation pass also exercised Safari standard toggles and IINA Hyper toggles in the same packaged session:
+  - the saved shortcut fixture contained both Safari standard and IINA Hyper bindings, so `checkPermission: ax=true im=true carbon=true eventTap=true` was the expected steady-state readiness snapshot
+  - the recent runtime log window showed repeated `TOGGLE_STABLE` -> `TOGGLE_HIDE_CONFIRMED` pairs for both apps, plus expected cooldown blocks under rapid repeat input, but no fresh `TOGGLE_DEGRADED`, `TOGGLE_HIDE_DEGRADED`, `phase=no_session`, `hide_untracked`, or capture-blocked signatures
 
 ## Toggle Loop Fix and Cross-App Restore (2026-03-25, Issue #80)
 - **Toggle loop root cause**: physical key repeat events spaced > 200ms bypassed debounce, causing activate/hide/activate cycles
@@ -92,7 +96,7 @@ On 2026-04-09, packaged-app runtime validation moved past the original TCC block
 - Toggle-off settled: `TOGGLE_TRACE_CONFIRMATION attemptId=... event=confirmed reason="hide_confirmed"`
 - Owned launch path started correctly: `TOGGLE_TRACE_SESSION attemptId=... event=session_started activationPath=launch reason="not_running_launch_request"`
 - Owned launch attached to the real process: `TOGGLE_TRACE_SESSION attemptId=... event=launch_attached activationPath=launch reason="launch_completion_process_lookup"`
-- Hyper-routed Safari in the current local config: `SHORTCUT_TRACE_DECISION event=matched bundle=com.apple.Safari route=hyper`
+- Hyper-routed IINA in the current local config: `SHORTCUT_TRACE_DECISION event=matched bundle=com.colliderli.iina route=hyper`
 
 ### Trace signatures to treat as failure or follow-up
 - Regular app frontmost but still unusable: `TOGGLE_TRACE_CONFIRMATION attemptId=... event=awaiting_window_evidence reason="frontmost_without_window_evidence"`
@@ -106,11 +110,12 @@ On 2026-04-09, packaged-app runtime validation moved past the original TCC block
 - When `hide_untracked` is valid, it must still be followed by a real hide lane (`HIDE_REQUEST` and `TOGGLE_HIDE_CONFIRMED` or explicit degraded confirmation). A lone `hide_untracked` log without a deactivation session is a bug.
 - `TOGGLE_TRACE_DECISION event=blocked reason="activation_pending_not_stable"` is the correct second-press behavior while an owned launch/activation is still settling.
 - `checkPermission: ax=true im=true carbon=false eventTap=true` is only suspicious if the current enabled shortcut set is supposed to be standard-only. If the persisted shortcut is Hyper-routed and `hyperKeyEnabled` is on, that snapshot is expected.
+- `checkPermission: ax=true im=true carbon=true eventTap=true` is the expected steady-state snapshot when the saved fixture mixes standard and Hyper shortcuts.
 - `scripts/e2e-full-test.sh` and `scripts/e2e-lib.sh` now preflight packaged-app startup with transport-aware readiness: standard-only configs accept `carbon=true eventTap=false`, Hyper-only configs require an active event tap, and mixed fixtures require both transports to be ready before modules start.
-- E2E modules should treat missing fixture shortcuts as configuration skips, not runtime failures. On the current local setup, Safari standard coverage is valid while the IINA Hyper module should report `WARN` unless a Hyper-routed IINA shortcut is actually present in `shortcuts.json`.
+- E2E modules should treat missing fixture shortcuts as configuration skips, not runtime failures. When both Safari standard and IINA Hyper are present in `shortcuts.json`, the current local full suite should run without warnings.
 
 ## Follow-up Requiring macOS Validation
-- If you want to validate the standard transport specifically, first switch the persisted shortcut back to a standard combo; otherwise continue validating the current Hyper-routed config with F19 / Hyper input and rerun `bash scripts/e2e-full-test.sh`
+- If you want to validate one transport in isolation, trim the saved fixture to that transport first. The current local fixture is mixed, so combined validation should expect both Carbon and event-tap readiness.
 - Fresh-launch path
   Validate: target not running -> shortcut launches it -> second press hides it without `hide_untracked` or `phase=no_session`
 - Relaunch path
@@ -160,7 +165,7 @@ On 2026-04-09, packaged-app runtime validation moved past the original TCC block
 - Signed/notarized release validation is still blocked on Developer ID availability; until those credentials exist, only the internal-package DMG artifact path can be verified end-to-end
 
 ## Immediate Next Actions
-1. Rerun `bash scripts/e2e-full-test.sh` with the intended shortcut transport explicitly set first: either keep the current Hyper-routed Safari config and drive F19 / Hyper input, or switch Safari back to a standard combo before interpreting Carbon readiness logs
+1. Keep the intended shortcut fixture explicit before interpreting readiness logs. The current local fixture is mixed (Safari standard + IINA Hyper), so `carbon=true eventTap=true` and a warning-free `bash scripts/e2e-full-test.sh` run are now the expected baseline.
 2. Expand the targeted macOS validation matrix from the now-confirmed Safari fresh-launch / relaunch / external-activation paths to Finder, Terminal, Home, Clock, System Settings, hidden/minimized paths, and event-tap timeout stress
 3. Verify standard-shortcut vs Hyper parity on the same target apps beyond the already revalidated Safari cases, and capture any remaining app-specific exceptions in this file
 4. Use the internal-package workflow for tester-facing DMG artifacts until Developer ID credentials are available

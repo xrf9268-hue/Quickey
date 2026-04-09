@@ -241,6 +241,7 @@ Standard shortcuts and Hyper shortcuts have different readiness predicates. Wait
 
 **Practical guidance**
 Drive validation off the active transport, not a one-size-fits-all startup marker. For standard shortcuts, require Accessibility plus successful Carbon registration. For Hyper shortcuts, require Input Monitoring plus an active event tap. Keep the validation rule aligned with the same transport-specific readiness semantics used in production code.
+For mixed fixtures, expect both transports to be ready at once (`carbon=true` and `eventTap=true`) and make the harness wait for both before declaring startup healthy.
 
 ## E2E Fixtures Must Match The Saved Shortcut Set
 
