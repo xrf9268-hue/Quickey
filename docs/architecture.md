@@ -3,72 +3,66 @@
 ## High-level overview
 Quickey is a menu bar macOS utility that stores app-shortcut bindings, captures global key events, matches them to stored shortcuts, and toggles target apps.
 
-```text
-+--------------------+
-|   Menu Bar App     |
-|  AppDelegate/Main  |
-+---------+----------+
-          |
-          v
-+--------------------+
-|   AppController    |
-| bootstraps modules |
-+----+----+----+-----+
-     |    |    |
-     |    |    +-----------------------------+
-     |    |                                  |
-     v    v                                  v
-+---------+--------+              +----------------------+
-| ShortcutManager  |<------------>|    ShortcutStore     |
-| event + trigger  |              | in-memory shortcuts  |
-+----+--------+----+              +----------+-----------+
-     |        |                              |
-     |        v                              v
-     |   +------------------+        +-------------------+
-     |   | Persistence      |        | Settings UI       |
-     |   | JSON save/load   |        | SwiftUI + AppKit  |
-     |   +------------------+        +-------------------+
-     |
-     v
-+--------------------+
-+ ShortcutCapture    +
-| Coordinator        |
-+---------+----------+
-     +----+----+
-     |         |
-     v         v
-+--------------------+   +--------------------+
-| CarbonHotKeyProvider|   | EventTapManager   |
-| standard shortcuts  |   | Hyper-only input  |
-+---------+----------+   +---------+----------+
-          |                        |
-          +-----------+------------+
-                      |
-                      v
-+--------------------+
-|    KeyMatcher      |
-| key/modifier match |
-+---------+----------+
-          |
-          v
-+--------------------+
-|    AppSwitcher     |
-| activate/toggle    |
-+----+---------+-----------+
-     |         |
-     |         +-----------------------+
-     |                                 |
-     v                                 v
-+---------------------------+   +------------------------+
-| ToggleSessionCoordinator  |   | ApplicationObservation |
-| per-target runtime state  |   | frontmost/window truth |
-+------------+--------------+   +------------------------+
-             |
-             v
-+---------------------------+
-| FrontmostApplicationTracker |
-| previous app restore state |
-+---------------------------+
+```mermaid
+flowchart LR
+  subgraph B["启动 / 配置"]
+    A["A(AppController)\n启动编排"]
+    H["H(HyperKeyService)\n恢复持久化 Hyper"]
+    P["P(PersistenceService)\nshortcuts.json"]
+    S["S(ShortcutStore)\n内存快捷键"]
+    U["U(Settings UI / AppPreferences)\n编辑快捷键与通用设置"]
+    R["R(LaunchAtLoginService)\n登录项状态"]
+    X["X(UsageTracker)\n使用统计"]
+  end
+
+  subgraph C["捕获 / 匹配"]
+    M["M(ShortcutManager)\n匹配、分发、SHORTCUT_TRACE_*"]
+    Q["Q(ShortcutCaptureCoordinator)\ntransport-aware readiness"]
+    C1["C(CarbonHotKeyProvider)\n标准快捷键"]
+    E["E(EventTapCaptureProvider / EventTapManager)\nHyper 快捷键"]
+    K["K(KeyMatcher)\nO(1) Trigger Index"]
+  end
+
+  subgraph T["Toggle 运行时"]
+    W["W(AppSwitcher)\n激活 / 隐藏编排"]
+    T1["T(ToggleSessionCoordinator)\ncanonical owner\nlaunching → activating → activeStable → deactivating → degraded / idle"]
+    O["O(ApplicationObservation)\nfrontmost + window 证据"]
+    F["F(FrontmostApplicationTracker)\nprevious app snapshot"]
+    L["L(AppBundleLocator)\n目标 app 定位"]
+    G["G(ToggleDiagnosticEvent)\nTOGGLE_TRACE_* 格式化"]
+  end
+
+  U --> P
+  U --> S
+  U --> H
+  U --> R
+  U --> X
+
+  A --> P
+  A --> S
+  A --> H
+  A --> M
+  A --> R
+
+  P --> S
+  S --> M
+  S --> K
+  M --> K
+
+  M <--> Q
+  Q --> C1
+  Q --> E
+  C1 --> M
+  E --> M
+
+  M --> W
+  W <--> T1
+  W --> O
+  W --> F
+  W --> L
+
+  M --> G
+  W --> G
 ```
 
 ## Main modules

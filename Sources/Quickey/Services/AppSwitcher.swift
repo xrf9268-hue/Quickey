@@ -183,6 +183,7 @@ final class AppSwitcher: AppSwitching {
     private let toggleCooldown: TimeInterval = 0.4
     private let cooldownCacheLimit = 20
     private let cooldownEvictionWindow: CFAbsoluteTime = 60
+    private let hiddenStateSettleRetryDelay: TimeInterval = 0.05
     private let deactivationConfirmationInitialDelay: TimeInterval = 0.05
     private let deactivationConfirmationPollInterval: TimeInterval = 0.05
     private let deactivationConfirmationTimeout: TimeInterval = 0.3
@@ -419,6 +420,7 @@ final class AppSwitcher: AppSwitching {
             activationPath: activationPath,
             delay: 0.075,
             nextRecoveryStage: .makeKeyWindow,
+            allowHiddenStateSettleRetry: true,
             observe: observe,
             recoverIfNeeded: recoverIfNeeded
         )
@@ -430,6 +432,7 @@ final class AppSwitcher: AppSwitching {
         activationPath: ActivationPath,
         delay: TimeInterval,
         nextRecoveryStage: WindowRecoveryStage?,
+        allowHiddenStateSettleRetry: Bool,
         observe: @escaping @MainActor () -> ActivationObservationSnapshot,
         recoverIfNeeded: @escaping @MainActor (WindowRecoveryStage, @escaping @MainActor () -> Void) -> Void
     ) {
@@ -465,6 +468,29 @@ final class AppSwitcher: AppSwitching {
                     reason: "activation_stable",
                     activationPath: activationPath,
                     previousBundle: pendingActivationState.previousBundleIdentifier
+                )
+                return
+            }
+
+            if allowHiddenStateSettleRetry,
+               self.shouldRetryObservationForHiddenStateLag(with: snapshot) {
+                self.logToggleTrace(
+                    family: .confirmation,
+                    bundleIdentifier: state.bundleIdentifier,
+                    event: "awaiting_hidden_state_settle",
+                    reason: "frontmost_window_complete_hidden_lag",
+                    activationPath: activationPath,
+                    previousBundle: pendingActivationState.previousBundleIdentifier
+                )
+                self.schedulePendingConfirmation(
+                    state: state,
+                    shortcut: shortcut,
+                    activationPath: activationPath,
+                    delay: self.hiddenStateSettleRetryDelay,
+                    nextRecoveryStage: nextRecoveryStage,
+                    allowHiddenStateSettleRetry: false,
+                    observe: observe,
+                    recoverIfNeeded: recoverIfNeeded
                 )
                 return
             }
@@ -507,6 +533,7 @@ final class AppSwitcher: AppSwitching {
                     activationPath: activationPath,
                     delay: nextRecoveryStage.settlingDelay,
                     nextRecoveryStage: nextRecoveryStage.nextStage,
+                    allowHiddenStateSettleRetry: false,
                     observe: observe,
                     recoverIfNeeded: recoverIfNeeded
                 )
@@ -636,6 +663,15 @@ final class AppSwitcher: AppSwitching {
             return .axRaise
         }
         return candidate
+    }
+
+    private func shouldRetryObservationForHiddenStateLag(with snapshot: ActivationObservationSnapshot) -> Bool {
+        snapshot.targetIsObservedFrontmost &&
+            snapshot.targetIsActive &&
+            snapshot.targetIsHidden &&
+            snapshot.targetHasVisibleWindows &&
+            snapshot.hasFocusedWindow &&
+            snapshot.hasMainWindow
     }
 
     private func canConfirmDeactivation(with snapshot: ActivationObservationSnapshot) -> Bool {

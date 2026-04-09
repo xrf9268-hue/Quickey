@@ -570,6 +570,175 @@ func visibleWindowEvidencePromotesStableWithoutRecoveryEscalation() {
     #expect(switcher.stableActivationState?.bundleIdentifier == "com.apple.Safari")
 }
 
+@Test @MainActor
+func hiddenLagWithCompleteWindowEvidenceRetriesObservationBeforeWindowRecovery() {
+    let scheduler = ManualConfirmationScheduler()
+    let switcher = AppSwitcher(
+        frontmostTracker: makeTrackerForAppSwitcherTests(),
+        confirmationClient: .init(
+            now: { 75 },
+            schedule: { delay, operation in
+                scheduler.schedule(after: delay, operation)
+            }
+        )
+    )
+    let state = switcher.acceptPendingActivation(
+        for: "dev.zed.Zed",
+        previousBundleIdentifier: "com.mitchellh.ghostty",
+        startedAt: 75
+    )
+    let shortcut = AppShortcut(
+        appName: "Zed",
+        bundleIdentifier: "dev.zed.Zed",
+        keyEquivalent: "z",
+        modifierFlags: ["control", "option", "shift", "command"]
+    )
+    var snapshots = [
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "dev.zed.Zed",
+            observedFrontmostBundleIdentifier: "dev.zed.Zed",
+            targetIsActive: true,
+            targetIsHidden: true,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .regularWindowed,
+            classificationReason: "visible focused main window with stale hidden state"
+        ),
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "dev.zed.Zed",
+            observedFrontmostBundleIdentifier: "dev.zed.Zed",
+            targetIsActive: true,
+            targetIsHidden: false,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .regularWindowed,
+            classificationReason: "visible focused main window"
+        )
+    ]
+    var events: [String] = []
+
+    switcher.schedulePendingConfirmation(
+        state: state,
+        shortcut: shortcut,
+        activationPath: .unhideActivate,
+        observe: {
+            let snapshot = snapshots.removeFirst()
+            events.append("confirm:hidden=\(snapshot.targetIsHidden)")
+            return snapshot
+        },
+        recoverIfNeeded: { stage, completion in
+            events.append("recover:\(stage.rawValue)")
+            completion()
+        }
+    )
+
+    scheduler.runNext()
+    scheduler.runNext()
+
+    #expect(events == ["confirm:hidden=true", "confirm:hidden=false"])
+    #expect(switcher.stableActivationState?.bundleIdentifier == "dev.zed.Zed")
+}
+
+@Test @MainActor
+func hiddenLagOnlyRetriesObservationOnceBeforeRecoveryEscalation() {
+    let scheduler = ManualConfirmationScheduler()
+    let switcher = AppSwitcher(
+        frontmostTracker: makeTrackerForAppSwitcherTests(),
+        confirmationClient: .init(
+            now: { 80 },
+            schedule: { delay, operation in
+                scheduler.schedule(after: delay, operation)
+            }
+        )
+    )
+    let state = switcher.acceptPendingActivation(
+        for: "dev.zed.Zed",
+        previousBundleIdentifier: "com.mitchellh.ghostty",
+        startedAt: 80
+    )
+    let shortcut = AppShortcut(
+        appName: "Zed",
+        bundleIdentifier: "dev.zed.Zed",
+        keyEquivalent: "z",
+        modifierFlags: ["control", "option", "shift", "command"]
+    )
+    var snapshots = [
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "dev.zed.Zed",
+            observedFrontmostBundleIdentifier: "dev.zed.Zed",
+            targetIsActive: true,
+            targetIsHidden: true,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .regularWindowed,
+            classificationReason: "visible focused main window with stale hidden state"
+        ),
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "dev.zed.Zed",
+            observedFrontmostBundleIdentifier: "dev.zed.Zed",
+            targetIsActive: true,
+            targetIsHidden: true,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .regularWindowed,
+            classificationReason: "hidden state still lagging"
+        ),
+        ActivationObservationSnapshot(
+            targetBundleIdentifier: "dev.zed.Zed",
+            observedFrontmostBundleIdentifier: "dev.zed.Zed",
+            targetIsActive: true,
+            targetIsHidden: false,
+            visibleWindowCount: 1,
+            hasFocusedWindow: true,
+            hasMainWindow: true,
+            windowObservationSucceeded: true,
+            windowObservationFailureReason: nil,
+            classification: .regularWindowed,
+            classificationReason: "visible focused main window"
+        )
+    ]
+    var events: [String] = []
+
+    switcher.schedulePendingConfirmation(
+        state: state,
+        shortcut: shortcut,
+        activationPath: .unhideActivate,
+        observe: {
+            let snapshot = snapshots.removeFirst()
+            events.append("confirm:hidden=\(snapshot.targetIsHidden)")
+            return snapshot
+        },
+        recoverIfNeeded: { stage, completion in
+            events.append("recover:\(stage.rawValue)")
+            completion()
+        }
+    )
+
+    scheduler.runNext()
+    scheduler.runNext()
+    scheduler.runNext()
+
+    #expect(events == [
+        "confirm:hidden=true",
+        "confirm:hidden=true",
+        "recover:makeKeyWindow",
+        "confirm:hidden=false"
+    ])
+    #expect(switcher.stableActivationState?.bundleIdentifier == "dev.zed.Zed")
+}
+
 // MARK: - Coordinator integration tests
 
 @Test @MainActor
