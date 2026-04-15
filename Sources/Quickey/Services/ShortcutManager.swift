@@ -119,7 +119,7 @@ final class ShortcutManager {
 
     func checkPermissionChange() {
         let axGranted = permissionService.isAccessibilityTrusted()
-        let imGranted = permissionService.isInputMonitoringTrusted()
+        var imGranted = permissionService.isInputMonitoringTrusted()
         let snapshot = captureCoordinator.snapshot()
         let accessibilityChanged = axGranted != lastAccessibilityState
         let inputMonitoringChanged = imGranted != lastInputMonitoringState
@@ -163,6 +163,23 @@ final class ShortcutManager {
                 captureCoordinator.stop()
             }
             return
+        }
+
+        if accessibilityChanged
+            && captureCoordinator.inputMonitoringRequired
+            && !imGranted
+        {
+            _ = permissionService.requestIfNeeded(
+                prompt: true,
+                inputMonitoringRequired: true
+            )
+            let refreshedInputMonitoring = permissionService.isInputMonitoringTrusted()
+            if refreshedInputMonitoring != imGranted {
+                imGranted = refreshedInputMonitoring
+                lastInputMonitoringState = refreshedInputMonitoring
+                logger.notice("Input Monitoring permission: granted")
+                diagnosticClient.log("Input Monitoring permission: granted")
+            }
         }
 
         let currentStatus = captureCoordinator.status(

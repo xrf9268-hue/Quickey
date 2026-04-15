@@ -336,6 +336,37 @@ func enablingHyperAtRuntimeRequestsInputMonitoringAndResyncsCapture() {
 }
 
 @Test @MainActor
+func grantingAccessibilityAfterHyperBecomesRequiredRequestsInputMonitoring() {
+    let permissionService = MutablePermissionService(ax: false, input: false)
+    permissionService.grantInputMonitoringOnPrompt = true
+    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+        permissionService: permissionService
+    )
+    manager.save(shortcuts: [hyperShortcut()])
+
+    manager.start()
+    manager.setHyperKeyEnabled(true)
+
+    #expect(permissionService.requestedInputMonitoringFlags == [false])
+    #expect(standardProvider.isRunning == false)
+    #expect(hyperProvider.isRunning == false)
+
+    permissionService.ax = true
+    manager.checkPermissionChange()
+
+    let status = manager.shortcutCaptureStatus()
+
+    #expect(permissionService.requestedInputMonitoringFlags == [false, true])
+    #expect(status.accessibilityGranted == true)
+    #expect(status.inputMonitoringGranted == true)
+    #expect(status.inputMonitoringRequired == true)
+    #expect(status.standardShortcutsReady == true)
+    #expect(status.hyperShortcutsReady == true)
+    #expect(standardProvider.isRunning == false)
+    #expect(hyperProvider.isRunning == true)
+}
+
+@Test @MainActor
 func accessibilityLossStopsAllShortcutCapture() {
     let permissionService = MutablePermissionService(ax: false, input: false)
     let standardProvider = FakeCaptureProvider()
