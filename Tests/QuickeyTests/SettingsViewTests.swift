@@ -91,11 +91,12 @@ private func makePreferences(
 @MainActor
 private func makeShortcutManager(
     permissionService: some PermissionServicing,
-    captureCoordinator: ShortcutCaptureCoordinator
+    captureCoordinator: ShortcutCaptureCoordinator,
+    persistenceService: PersistenceService = TestPersistenceHarness().makePersistenceService()
 ) -> ShortcutManager {
     ShortcutManager(
         shortcutStore: ShortcutStore(),
-        persistenceService: PersistenceService(),
+        persistenceService: persistenceService,
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: captureCoordinator,
         permissionService: permissionService,

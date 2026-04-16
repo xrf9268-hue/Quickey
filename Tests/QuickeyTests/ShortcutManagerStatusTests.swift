@@ -173,21 +173,22 @@ private func makeShortcutManager(
     permissionService: some PermissionServicing,
     standardProvider: FakeCaptureProvider = FakeCaptureProvider(),
     hyperProvider: FakeHyperCaptureProvider = FakeHyperCaptureProvider(),
+    persistenceHarness: TestPersistenceHarness = TestPersistenceHarness(),
     diagnosticSink: @escaping @Sendable (String) -> Void = { _ in }
-) -> (ShortcutManager, FakeCaptureProvider, FakeHyperCaptureProvider) {
+) -> (manager: ShortcutManager, standardProvider: FakeCaptureProvider, hyperProvider: FakeHyperCaptureProvider, persistenceHarness: TestPersistenceHarness) {
     let coordinator = ShortcutCaptureCoordinator(
         standardProvider: standardProvider,
         hyperProvider: hyperProvider
     )
     let manager = ShortcutManager(
         shortcutStore: ShortcutStore(),
-        persistenceService: PersistenceService(),
+        persistenceService: persistenceHarness.makePersistenceService(),
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: coordinator,
         permissionService: permissionService,
         diagnosticClient: .init(log: diagnosticSink)
     )
-    return (manager, standardProvider, hyperProvider)
+    return (manager, standardProvider, hyperProvider, persistenceHarness)
 }
 
 private func standardShortcut() -> AppShortcut {
@@ -218,8 +219,22 @@ private func hyperShortcut() -> AppShortcut {
 }
 
 @Test @MainActor
+func helperBuiltShortcutManagerCanPersistIntoInjectedHarness() throws {
+    let shortcuts = [standardShortcut()]
+    let context = makeShortcutManager(
+        permissionService: FakePermissionService(ax: true, input: false)
+    )
+
+    context.manager.save(shortcuts: shortcuts)
+
+    let persisted = try context.persistenceHarness.makePersistenceService().load()
+    #expect(persisted == shortcuts)
+    #expect(context.persistenceHarness.shortcutsURL.path.hasPrefix(FileManager.default.temporaryDirectory.path))
+}
+
+@Test @MainActor
 func captureStatusKeepsStandardShortcutsReadyWhenInputMonitoringIsMissing() {
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false)
     )
     manager.save(shortcuts: [standardShortcut()])
@@ -242,7 +257,7 @@ func captureStatusKeepsStandardShortcutsReadyWhenInputMonitoringIsMissing() {
 
 @Test @MainActor
 func hyperShortcutsNeedInputMonitoringAndDoNotStartEventTapWithoutIt() {
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false)
     )
     manager.save(shortcuts: [hyperShortcut()])
@@ -272,7 +287,7 @@ func hyperRoutingFollowsHyperKeyToggle() {
 @Test @MainActor
 func permissionGainStartsStandardCaptureWhenAccessibilityBecomesAvailable() {
     let permissionService = MutablePermissionService(ax: true, input: false)
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [standardShortcut()])
@@ -287,7 +302,7 @@ func permissionGainStartsStandardCaptureWhenAccessibilityBecomesAvailable() {
 @Test @MainActor
 func startDoesNotRequestInputMonitoringWhenCurrentConfigurationIsStandardOnly() {
     let permissionService = MutablePermissionService(ax: true, input: false)
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [standardShortcut()])
@@ -304,7 +319,7 @@ func startDoesNotRequestInputMonitoringWhenCurrentConfigurationIsStandardOnly() 
 func startRequestsInputMonitoringWhenCurrentConfigurationNeedsHyperTransport() {
     let permissionService = MutablePermissionService(ax: true, input: false)
     permissionService.grantInputMonitoringOnPrompt = true
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [hyperShortcut()])
@@ -328,7 +343,7 @@ func startRequestsInputMonitoringWhenCurrentConfigurationNeedsHyperTransport() {
 func startDefersInputMonitoringPromptUntilAccessibilityIsGrantedForHyperConfiguration() {
     let permissionService = MutablePermissionService(ax: false, input: false)
     permissionService.grantInputMonitoringOnPrompt = true
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [hyperShortcut()])
@@ -359,7 +374,7 @@ func startDefersInputMonitoringPromptUntilAccessibilityIsGrantedForHyperConfigur
 @Test @MainActor
 func mixedConfigurationKeepsStandardShortcutsReadyWhileHyperWaitsForInputMonitoring() {
     let permissionService = MutablePermissionService(ax: true, input: false)
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [standardShortcut(), hyperShortcut()])
@@ -382,7 +397,7 @@ func mixedConfigurationKeepsStandardShortcutsReadyWhileHyperWaitsForInputMonitor
 func enablingHyperAtRuntimeRequestsInputMonitoringAndResyncsCapture() {
     let permissionService = MutablePermissionService(ax: true, input: false)
     permissionService.grantInputMonitoringOnPrompt = true
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [hyperShortcut()])
@@ -409,7 +424,7 @@ func enablingHyperAtRuntimeRequestsInputMonitoringAndResyncsCapture() {
 func grantingAccessibilityAfterHyperBecomesRequiredRequestsInputMonitoring() {
     let permissionService = MutablePermissionService(ax: false, input: false)
     permissionService.grantInputMonitoringOnPrompt = true
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [hyperShortcut()])
@@ -449,7 +464,7 @@ func accessibilityLossStopsAllShortcutCapture() {
     )
     let manager = ShortcutManager(
         shortcutStore: ShortcutStore(),
-        persistenceService: PersistenceService(),
+        persistenceService: TestPersistenceHarness().makePersistenceService(),
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: coordinator,
         permissionService: permissionService,
@@ -467,7 +482,7 @@ func accessibilityLossStopsAllShortcutCapture() {
 @Test @MainActor
 func unchangedPermissionsDoNotResyncCaptureRepeatedly() {
     let permissionService = MutablePermissionService(ax: true, input: false)
-    let (manager, standardProvider, hyperProvider) = makeShortcutManager(
+    let (manager, standardProvider, hyperProvider, _) = makeShortcutManager(
         permissionService: permissionService
     )
     manager.save(shortcuts: [standardShortcut()])
@@ -486,7 +501,7 @@ func unchangedPermissionsDoNotResyncCaptureRepeatedly() {
 func matchedShortcutEmitsTraceOnlyForMatchedKeys() {
     let diagnostics = DiagnosticCapture()
     let standardProvider = FakeCaptureProvider()
-    let (manager, _, _) = makeShortcutManager(
+    let (manager, _, _, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false),
         standardProvider: standardProvider,
         diagnosticSink: diagnostics.record
@@ -515,7 +530,7 @@ func missingStandardRegistrationEmitsCaptureBlockedDiagnostic() {
     let diagnostics = DiagnosticCapture()
     let standardProvider = FakeCaptureProvider()
     standardProvider.startSucceeds = false
-    let (manager, _, _) = makeShortcutManager(
+    let (manager, _, _, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false),
         standardProvider: standardProvider,
         diagnosticSink: diagnostics.record
@@ -545,7 +560,7 @@ func partialStandardRegistrationMarksStandardCaptureNotReadyAndIncludesFailedBin
         modifiers: [.command, .shift]
     )
     standardProvider.failingShortcuts = [failedKeyPress]
-    let (manager, _, _) = makeShortcutManager(
+    let (manager, _, _, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false),
         standardProvider: standardProvider,
         diagnosticSink: diagnostics.record
@@ -572,7 +587,7 @@ func partialStandardRegistrationMarksStandardCaptureNotReadyAndIncludesFailedBin
 @Test @MainActor
 func missingInputMonitoringEmitsHyperCaptureBlockedDiagnostic() {
     let diagnostics = DiagnosticCapture()
-    let (manager, _, _) = makeShortcutManager(
+    let (manager, _, _, _) = makeShortcutManager(
         permissionService: FakePermissionService(ax: true, input: false),
         diagnosticSink: diagnostics.record
     )

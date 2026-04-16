@@ -14,7 +14,7 @@ func savingShortcutChangesInvokesConfigurationChangeHandler() {
 
     let manager = ShortcutManager(
         shortcutStore: shortcutStore,
-        persistenceService: PersistenceService(),
+        persistenceService: TestPersistenceHarness().makePersistenceService(),
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: ShortcutCaptureCoordinator(
             standardProvider: FakeCaptureProvider(),
