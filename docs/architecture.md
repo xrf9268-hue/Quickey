@@ -112,6 +112,7 @@ Responsibilities:
 - represent recorder output
 - detect duplicate/conflicting bindings
 - hold in-memory state used by the event path and UI
+- persist only the current `[AppShortcut]` schema; unsupported or partially corrupted payloads are load failures, not best-effort partial recovery
 
 ### Event capture and matching
 - `ShortcutCaptureCoordinator`
@@ -257,6 +258,7 @@ CGEvent callback receives tapDisabledByTimeout / tapDisabledByUserInput
 - **AppKit-first with selective SwiftUI**: deliberate architectural decision documented in `docs/archive/app-structure-direction.md`; hard AppKit requirements (`.accessory` policy, raw key capture, CGEvent tap, NSWorkspace) prevent a pure SwiftUI scene-based approach
 - **Capability-aware shortcut readiness**: `ShortcutCaptureStatus` separates Accessibility, Input Monitoring, Carbon registration, Hyper event-tap activity, standard-shortcut readiness, and Hyper readiness
 - **On-demand Input Monitoring**: startup and later shortcut-routing changes request Input Monitoring only when the current enabled shortcut set actually needs Hyper transport; standard-only configurations stay on the Carbon/Accessibility path without an eager Input Monitoring prompt, and Hyper-required startup defers the Input Monitoring request until Accessibility has actually been granted
+- **Strict persistence schema**: Quickey currently supports only the exact `[AppShortcut]` payload it writes today; if `shortcuts.json` is malformed or missing required fields, loading fails loudly, logs `path` plus `reason`, and preserves a `shortcuts.load-failure-*.json` copy instead of silently treating the state as empty
 - **O(1) trigger index**: `ShortcutSignature` dictionary replaces linear scans in the hot path
 - **Observation-first toggle truth**: `ApplicationObservation` snapshots gate stable-state promotion from frontmost/window evidence instead of trusting `isActive` alone
 - **Single-source toggle ownership**: `ToggleSessionCoordinator` is the only mutable lifecycle owner; `AppSwitcher` derives pending/stable views from coordinator state instead of dual-writing local activation state

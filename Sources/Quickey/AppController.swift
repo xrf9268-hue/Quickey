@@ -36,7 +36,7 @@ final class AppController {
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
 
         Self.runStartupSequence(
-            loadShortcuts: { persistenceService.load() },
+            loadShortcuts: { try persistenceService.load() },
             replaceShortcuts: { shortcutStore.replaceAll(with: $0) },
             reapplyHyperIfNeeded: { hyperKeyService.reapplyIfNeeded() },
             isHyperEnabled: { hyperKeyService.isEnabled },
@@ -57,7 +57,7 @@ final class AppController {
     }
 
     static func runStartupSequence(
-        loadShortcuts: @MainActor () -> [AppShortcut],
+        loadShortcuts: @MainActor () throws -> [AppShortcut],
         replaceShortcuts: @MainActor ([AppShortcut]) -> Void,
         reapplyHyperIfNeeded: @MainActor () -> Void,
         isHyperEnabled: @MainActor () -> Bool,
@@ -65,7 +65,13 @@ final class AppController {
         startShortcutManager: @MainActor () -> Void,
         installMenuBar: @MainActor () -> Void
     ) {
-        replaceShortcuts(loadShortcuts())
+        do {
+            replaceShortcuts(try loadShortcuts())
+        } catch {
+            DiagnosticLog.log(
+                "Startup skipped shortcut restore because persistence loading failed: \(error.localizedDescription)"
+            )
+        }
         reapplyHyperIfNeeded()
         setHyperKeyEnabled(isHyperEnabled())
         startShortcutManager()
