@@ -86,7 +86,7 @@ func setHyperKeyEnabledRefreshesShortcutCaptureStatusForHyperRoutingChanges() {
     ])
     let manager = ShortcutManager(
         shortcutStore: shortcutStore,
-        persistenceService: PersistenceService(),
+        persistenceService: TestPersistenceHarness().makePersistenceService(),
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: makeCaptureCoordinator(),
         permissionService: FakePermissionService(ax: true, input: false),
@@ -271,11 +271,12 @@ private struct FakeAppSwitcher: AppSwitching {
 @MainActor
 private func makeShortcutManager(
     permissionService: some PermissionServicing,
-    captureCoordinator: ShortcutCaptureCoordinator
+    captureCoordinator: ShortcutCaptureCoordinator,
+    persistenceService: PersistenceService = TestPersistenceHarness().makePersistenceService()
 ) -> ShortcutManager {
     ShortcutManager(
         shortcutStore: ShortcutStore(),
-        persistenceService: PersistenceService(),
+        persistenceService: persistenceService,
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: captureCoordinator,
         permissionService: permissionService,

@@ -265,6 +265,17 @@ The E2E shell modules historically assumed a fixed local fixture, such as Safari
 **Practical guidance**
 Teach each E2E module to inspect the current saved shortcuts before asserting on runtime behavior. If the required shortcut is absent for the expected route, report `SKIP`/`WARN` instead of `FAIL`. Reserve hard failures for mismatches between the configured shortcut and the observed runtime behavior.
 
+## Tests Must Not Use Live Application Support Persistence
+
+**Issue**
+`swift test` can silently mutate the real `~/Library/Application Support/Quickey/shortcuts.json`, contaminating the developer's local shortcut fixture and making test runs unsafe.
+
+**Cause**
+Some test helpers built `ShortcutManager` or `AppPreferences` with a default `PersistenceService()`. The live default storage path resolves through `StoragePaths.appSupportDirectory()`, so any test save path that does not inject `storageURLProvider` writes into the user's real Application Support directory.
+
+**Practical guidance**
+Treat the default `PersistenceService()` initializer as runtime-only. Any test that exercises save/load behavior through `ShortcutManager`, `AppPreferences`, or related helpers must inject an isolated persistence service backed by a temporary directory. Reuse a shared test harness instead of open-coding ad hoc temp paths so new tests inherit isolation by default. When verifying this boundary, compare the real `shortcuts.json` checksum before and after `swift test`; unchanged bytes are the acceptance signal.
+
 ## Previous App Self-Reference in Tracker
 
 **Issue**
