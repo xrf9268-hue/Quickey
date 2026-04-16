@@ -25,6 +25,7 @@ final class ShortcutManager {
     private var lastInputMonitoringState: Bool = false
     private var hyperKeyEnabled = false
     private var lastCaptureBlockedMessages: Set<String> = []
+    private var hasStarted = false
 
     init(
         shortcutStore: ShortcutStore,
@@ -45,24 +46,40 @@ final class ShortcutManager {
     }
 
     func start() {
-        let trusted = permissionService.requestIfNeeded(prompt: true)
-        logger.info("start(): trusted=\(trusted), isTrusted=\(self.permissionService.isTrusted())")
-        diagnosticClient.log("start(): trusted=\(trusted), isTrusted=\(permissionService.isTrusted())")
-        startPermissionMonitoring()
         rebuildIndex()
+        let inputMonitoringRequired = captureCoordinator.inputMonitoringRequired
+        let shouldRequestInputMonitoring = inputMonitoringRequired
+            && permissionService.isAccessibilityTrusted()
+        let ready = permissionService.requestIfNeeded(
+            prompt: true,
+            inputMonitoringRequired: shouldRequestInputMonitoring
+        )
+        logger.info(
+            "start(): ready=\(ready), ax=\(self.permissionService.isAccessibilityTrusted()), im=\(self.permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired)"
+        )
+        diagnosticClient.log(
+            "start(): ready=\(ready), ax=\(permissionService.isAccessibilityTrusted()), im=\(permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired)"
+        )
+        hasStarted = true
+        startPermissionMonitoring()
         attemptStartIfPermitted()
     }
 
     func stop() {
+        hasStarted = false
         permissionTimer?.invalidate()
         permissionTimer = nil
         captureCoordinator.stop()
     }
 
     func save(shortcuts: [AppShortcut]) {
+        let inputMonitoringWasRequired = captureCoordinator.inputMonitoringRequired
         shortcutStore.replaceAll(with: shortcuts)
         persistenceService.save(shortcuts)
         rebuildIndex()
+        handleCaptureConfigurationChange(
+            inputMonitoringWasRequired: inputMonitoringWasRequired
+        )
     }
 
     @discardableResult
@@ -82,8 +99,12 @@ final class ShortcutManager {
     }
 
     func setHyperKeyEnabled(_ enabled: Bool) {
+        let inputMonitoringWasRequired = captureCoordinator.inputMonitoringRequired
         hyperKeyEnabled = enabled
         captureCoordinator.setHyperKeyEnabled(enabled)
+        handleCaptureConfigurationChange(
+            inputMonitoringWasRequired: inputMonitoringWasRequired
+        )
     }
 
     // MARK: - Permission monitoring
@@ -100,7 +121,7 @@ final class ShortcutManager {
 
     func checkPermissionChange() {
         let axGranted = permissionService.isAccessibilityTrusted()
-        let imGranted = permissionService.isInputMonitoringTrusted()
+        var imGranted = permissionService.isInputMonitoringTrusted()
         let snapshot = captureCoordinator.snapshot()
         let accessibilityChanged = axGranted != lastAccessibilityState
         let inputMonitoringChanged = imGranted != lastInputMonitoringState
@@ -144,6 +165,23 @@ final class ShortcutManager {
                 captureCoordinator.stop()
             }
             return
+        }
+
+        if accessibilityChanged
+            && captureCoordinator.inputMonitoringRequired
+            && !imGranted
+        {
+            _ = permissionService.requestIfNeeded(
+                prompt: true,
+                inputMonitoringRequired: true
+            )
+            let refreshedInputMonitoring = permissionService.isInputMonitoringTrusted()
+            if refreshedInputMonitoring != imGranted {
+                imGranted = refreshedInputMonitoring
+                lastInputMonitoringState = refreshedInputMonitoring
+                logger.notice("Input Monitoring permission: granted")
+                diagnosticClient.log("Input Monitoring permission: granted")
+            }
         }
 
         let currentStatus = captureCoordinator.status(
@@ -199,6 +237,24 @@ final class ShortcutManager {
             "attemptStart: shortcuts=\(shortcutStore.shortcuts.count) triggerIndex=\(triggerIndex.count) carbon=\(snapshot.carbonHotKeysRegistered) eventTap=\(snapshot.eventTapActive)"
         )
         emitCaptureBlockedDiagnostics(snapshot: snapshot)
+    }
+
+    private func handleCaptureConfigurationChange(inputMonitoringWasRequired: Bool) {
+        guard hasStarted else {
+            return
+        }
+
+        let inputMonitoringRequired = captureCoordinator.inputMonitoringRequired
+        if !inputMonitoringWasRequired && inputMonitoringRequired && permissionService.isAccessibilityTrusted() {
+            _ = permissionService.requestIfNeeded(
+                prompt: true,
+                inputMonitoringRequired: true
+            )
+        }
+
+        captureCoordinator.refreshInputMonitoring(
+            granted: permissionService.isInputMonitoringTrusted()
+        )
     }
 
     // MARK: - Key handling
