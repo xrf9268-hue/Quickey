@@ -14,21 +14,32 @@ actor UsageTracker: UsageTracking {
     /// preventing use-after-free when the source NSString buffer is deallocated.
     private static let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-        return formatter
-    }()
+    /// Resolves the current time zone for date-key bucketing. Overridable for tests.
+    /// Rechecked on every recordUsage / query so the tracker follows user time-zone changes
+    /// (cross-zone travel, DST transitions, manual system-clock edits) without a restart.
+    private let timeZoneProvider: @Sendable () -> TimeZone
+    private var dateFormatter: DateFormatter
+    private var dateFormatterTimeZoneIdentifier: String
 
-    init() {
+    init(
+        timeZoneProvider: @escaping @Sendable () -> TimeZone = { TimeZone.current }
+    ) {
+        self.timeZoneProvider = timeZoneProvider
+        let tz = timeZoneProvider()
+        (self.dateFormatter, self.dateFormatterTimeZoneIdentifier) = Self.makeDateFormatter(for: tz)
         db = Self.openDatabase(path: Self.defaultDatabasePath())
         if let db {
             Self.createTable(db: db)
         }
     }
 
-    init(databasePath: String) {
+    init(
+        databasePath: String,
+        timeZoneProvider: @escaping @Sendable () -> TimeZone = { TimeZone.current }
+    ) {
+        self.timeZoneProvider = timeZoneProvider
+        let tz = timeZoneProvider()
+        (self.dateFormatter, self.dateFormatterTimeZoneIdentifier) = Self.makeDateFormatter(for: tz)
         db = Self.openDatabase(path: databasePath)
         if let db {
             Self.createTable(db: db)
@@ -205,11 +216,24 @@ actor UsageTracker: UsageTracking {
 
     private func windowStartString(days: Int, relativeTo now: Date) -> String {
         let clampedDays = max(days, 1)
-        let start = Calendar.current.date(byAdding: .day, value: -(clampedDays - 1), to: now) ?? now
+        var calendar = Calendar.current
+        calendar.timeZone = timeZoneProvider()
+        let start = calendar.date(byAdding: .day, value: -(clampedDays - 1), to: now) ?? now
         return dateString(for: start)
     }
 
     private func dateString(for date: Date) -> String {
-        return Self.dateFormatter.string(from: date)
+        let tz = timeZoneProvider()
+        if tz.identifier != dateFormatterTimeZoneIdentifier {
+            (dateFormatter, dateFormatterTimeZoneIdentifier) = Self.makeDateFormatter(for: tz)
+        }
+        return dateFormatter.string(from: date)
+    }
+
+    private static func makeDateFormatter(for timeZone: TimeZone) -> (DateFormatter, String) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = timeZone
+        return (formatter, timeZone.identifier)
     }
 }
