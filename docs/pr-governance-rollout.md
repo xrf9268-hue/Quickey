@@ -115,9 +115,10 @@ gh api repos/xrf9268-hue/Quickey/rulesets \
 The live ruleset should require:
 
 - pull requests for `main`
-- one approval
+- one approval for normal contributors
 - stale review dismissal or latest-push freshness
 - resolved conversations
+- a `RepositoryRole` admin bypass in `pull_request` mode so a solo maintainer can still merge once required checks pass
 - these required checks:
   - `CI / Build and Test`
   - `PR Metadata / Validate PR metadata`

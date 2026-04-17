@@ -25,7 +25,8 @@ Quickey now uses repository-native GitHub Actions and a checked-in ruleset artif
 
 4. **Versioned ruleset baseline** (`.github/governance/main-ruleset.json`)
    - Captures the desired `main` merge policy in-repo
-   - Requires pull requests, one approval, last-push freshness, conversation resolution, and the required deterministic checks
+   - Requires pull requests, last-push freshness, conversation resolution, and the required deterministic checks
+   - Keeps one-approval review gating for normal PR flows while allowing repository admins to bypass the pull-request rule in solo-maintainer cases
    - Gives repository admins a reviewable artifact to apply after the workflow changes are present on `main`
    - Is kept in the same schema shape used by GitHub's repository ruleset REST `POST`/`PUT` endpoints so the checked-in file can be applied directly
 
@@ -56,9 +57,11 @@ The ruleset should require these status checks:
 It should also require:
 
 - pull requests for all changes to `main`
-- at least one human approval
+- at least one human approval for normal contributors
 - approval freshness for the latest reviewable push
 - resolved review conversations
+
+Repository admins are allowed to bypass the pull-request rule in `pull_request` mode for solo-maintainer repos, but they still must satisfy the required status checks because those live in a separate ruleset rule.
 
 Do not apply the ruleset before the `Review Gate` workflow exists on `main`, or all PRs to `main` will be blocked by a missing required check.
 
