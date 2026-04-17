@@ -44,6 +44,8 @@ Recommended scopes for the token:
 1. Merge the governance workflow changes to `main`.
 2. Apply `.github/governance/main-ruleset.json` as a repository ruleset on `main`.
 
+For the one-time PR body draft, verification steps, and `gh api` apply commands, use [`pr-governance-rollout.md`](./pr-governance-rollout.md).
+
 The ruleset should require these status checks:
 
 - `CI / Build and Test`
