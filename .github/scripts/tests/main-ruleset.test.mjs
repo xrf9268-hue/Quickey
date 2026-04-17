@@ -21,11 +21,7 @@ test('main ruleset requires pull requests and review freshness', () => {
   assert.equal(pullRequestRule.parameters.require_last_push_approval, true);
   assert.equal(pullRequestRule.parameters.required_review_thread_resolution, true);
   assert.equal(pullRequestRule.parameters.require_code_owner_review, false);
-  assert.deepEqual(pullRequestRule.parameters.allowed_merge_methods, [
-    'merge',
-    'squash',
-    'rebase',
-  ]);
+  assert.deepEqual(pullRequestRule.parameters.allowed_merge_methods, ['merge', 'squash', 'rebase']);
 });
 
 test('main ruleset requires the deterministic Quickey checks', () => {
