@@ -4,7 +4,7 @@ This directory maps the maintainer-facing docs for Quickey.
 
 ## Core Docs
 - [`architecture.md`](./architecture.md)
-- [`github-automation.md`](./github-automation.md) — PR metadata enforcement, Quickey Backlog project reconciliation, runtime-validation field sync, and required repository secrets
+- [`github-automation.md`](./github-automation.md) — PR metadata enforcement, deterministic review gating, the checked-in `main` ruleset artifact, Quickey Backlog project reconciliation, runtime-validation field sync, and required repository secrets
 - [`signing-and-release.md`](./signing-and-release.md) — local DMG packaging, internal-package artifacts, signing, notarization, release secrets, and tag-driven GitHub Release flow
 
 ## Maintainer Notes
@@ -14,6 +14,7 @@ This directory maps the maintainer-facing docs for Quickey.
 
 ## Automation
 - [`github-automation.md`](./github-automation.md) — GitHub-native PR and Project workflows that close the issue/project-status gap
+- [`pr-governance-rollout.md`](./pr-governance-rollout.md) — one-time rollout runbook for the review gate and `main` ruleset apply sequence
 - [`loop-prompt.md`](./loop-prompt.md) — reference and migration note; active automation is the `/babysit-prs` skill
 - [`loop-job-guide.md`](./loop-job-guide.md) — how to run and manage loop jobs with `/loop 30m /babysit-prs`
 
