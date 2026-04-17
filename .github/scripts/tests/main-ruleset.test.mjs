@@ -34,6 +34,7 @@ test('main ruleset requires the deterministic Quickey checks', () => {
     (check) => check.context,
   );
 
+  assert.equal(statusChecksRule.parameters.do_not_enforce_on_create, false);
   assert.deepEqual(contexts, [
     'CI / Build and Test',
     'PR Metadata / Validate PR metadata',
