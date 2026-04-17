@@ -15,7 +15,7 @@
 ## File Map
 
 - Create: `.github/governance/main-ruleset.json` - versioned desired repository ruleset payload for `main`
-- Create: `.github/scripts/tests/main-ruleset.test.mjs` - validates that the checked-in ruleset still requires PRs, approvals, conversation resolution, and the exact required checks
+- Create: `.github/scripts/tests/main-ruleset.test.mjs` - validates that the checked-in ruleset still requires PRs, approvals for normal contributors, conversation resolution, the repo-admin PR-only bypass, and the exact required checks
 - Create: `.github/scripts/lib/review-state.mjs` - pure helpers for review-thread normalization, actionable-thread filtering, failure-state computation, and summary rendering
 - Create: `.github/scripts/validate-review-state.mjs` - workflow entrypoint that loads PR context, queries GitHub review state, writes concise logs plus `$GITHUB_STEP_SUMMARY`, and exits non-zero when merge-blocking review state remains
 - Create: `.github/scripts/tests/review-state.test.mjs` - deterministic tests for `CHANGES_REQUESTED`, unresolved threads, outdated threads, bot-vs-human treatment, and summary formatting
@@ -35,7 +35,7 @@
 
 - [ ] **Step 1: Write the failing ruleset contract test**
 
-Create `.github/scripts/tests/main-ruleset.test.mjs` with assertions that the checked-in ruleset targets the default branch and requires the full Phase 1 baseline:
+Create `.github/scripts/tests/main-ruleset.test.mjs` with assertions that the checked-in ruleset targets the default branch, includes the repo-admin `pull_request` bypass, and requires the full Phase 1 baseline for normal contributors:
 
 ```js
 import test from 'node:test';
@@ -96,7 +96,13 @@ Create `.github/governance/main-ruleset.json` with the repository-owned merge co
       "exclude": []
     }
   },
-  "bypass_actors": [],
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "pull_request"
+    }
+  ],
   "rules": [
     {
       "type": "pull_request",
