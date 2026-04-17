@@ -117,3 +117,88 @@ JSON
 
   [ "$status" -eq 1 ]
 }
+
+@test "resolve_primary_test_shortcut prefers a configured standard shortcut" {
+  local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
+  cat >"$shortcuts" <<'JSON'
+[
+  {
+    "appName": "Safari",
+    "bundleIdentifier": "com.apple.Safari",
+    "id": "11111111-1111-1111-1111-111111111111",
+    "isEnabled": true,
+    "keyEquivalent": "s",
+    "modifierFlags": ["command", "shift"]
+  },
+  {
+    "appName": "IINA",
+    "bundleIdentifier": "com.colliderli.iina",
+    "id": "22222222-2222-2222-2222-222222222222",
+    "isEnabled": true,
+    "keyEquivalent": "m",
+    "modifierFlags": ["command", "option", "control", "shift"]
+  }
+]
+JSON
+
+  run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; resolve_primary_test_shortcut '$shortcuts' 1"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"bundleIdentifier":"com.apple.Safari"'* ]]
+  [[ "$output" == *'"route":"standard"'* ]]
+  [[ "$output" == *'"keyCode":1'* ]]
+}
+
+@test "resolve_primary_test_shortcut falls back to hyper when no standard shortcut exists" {
+  local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
+  cat >"$shortcuts" <<'JSON'
+[
+  {
+    "appName": "Antigravity",
+    "bundleIdentifier": "com.google.antigravity",
+    "id": "11111111-1111-1111-1111-111111111111",
+    "isEnabled": true,
+    "keyEquivalent": "a",
+    "modifierFlags": ["command", "option", "control", "shift"]
+  }
+]
+JSON
+
+  run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; resolve_primary_test_shortcut '$shortcuts' 1"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"bundleIdentifier":"com.google.antigravity"'* ]]
+  [[ "$output" == *'"route":"hyper"'* ]]
+  [[ "$output" == *'"keyCode":0'* ]]
+}
+
+@test "resolve_isolation_shortcuts returns two distinct shortcuts for a hyper-only fixture" {
+  local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
+  cat >"$shortcuts" <<'JSON'
+[
+  {
+    "appName": "Antigravity",
+    "bundleIdentifier": "com.google.antigravity",
+    "id": "11111111-1111-1111-1111-111111111111",
+    "isEnabled": true,
+    "keyEquivalent": "a",
+    "modifierFlags": ["command", "option", "control", "shift"]
+  },
+  {
+    "appName": "Google Chrome",
+    "bundleIdentifier": "com.google.Chrome",
+    "id": "22222222-2222-2222-2222-222222222222",
+    "isEnabled": true,
+    "keyEquivalent": "b",
+    "modifierFlags": ["command", "option", "control", "shift"]
+  }
+]
+JSON
+
+  run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; resolve_isolation_shortcuts '$shortcuts' 1"
+
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | grep -c '"bundleIdentifier"')" -eq 2 ]
+  [[ "$output" == *'"bundleIdentifier":"com.google.antigravity"'* ]]
+  [[ "$output" == *'"bundleIdentifier":"com.google.Chrome"'* ]]
+}
