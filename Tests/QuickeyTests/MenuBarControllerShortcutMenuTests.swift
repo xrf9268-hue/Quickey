@@ -282,5 +282,30 @@ struct MenuBarControllerShortcutMenuTests {
         #expect(row.renderedTitleColor != NSColor.labelColor)
         #expect(row.renderedShortcutColor != NSColor.secondaryLabelColor)
         #expect(row.renderedIconAlpha < 1.0)
+        #expect(row.renderedStatusText == "disabled")
+        #expect(row.isStatusLabelHidden == false)
+        #expect(row.renderedStatusColor != NSColor.secondaryLabelColor)
+    }
+
+    @Test @MainActor
+    func disabledRunningShortcutRow_suppressesBrightRunningIndicatorAndUsesFallbackIconWhenNeeded() {
+        let controller = MenuBarController(onOpenSettings: {}, onQuit: {})
+        let menu = NSMenu()
+        let presentation = MenuBarShortcutItemPresentation(
+            bundleIdentifier: "invalid.bundle.identifier",
+            titleText: "Missing App",
+            shortcutText: "⌘M",
+            statusText: "disabled",
+            isEnabled: false,
+            isRunning: true,
+            isPlaceholder: false
+        )
+
+        controller.rebuildShortcutSection(in: menu, presentations: [presentation])
+
+        let row = try #require(menu.items[0].view as? MenuBarShortcutRowView)
+
+        #expect(row.isRunningDotHidden == true)
+        #expect(row.isUsingFallbackIcon == true)
     }
 }

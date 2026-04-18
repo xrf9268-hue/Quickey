@@ -8,6 +8,7 @@ final class MenuBarShortcutRowView: NSView {
     private let statusLabel = NSTextField(labelWithString: "")
     private let runningDot = NSView()
     private let shortcutLabel = NSTextField(labelWithString: "")
+    private var usingFallbackIcon = false
 
     init(presentation: MenuBarShortcutItemPresentation) {
         self.presentation = presentation
@@ -29,6 +30,11 @@ final class MenuBarShortcutRowView: NSView {
     var renderedTitleColor: NSColor { titleLabel.textColor ?? .labelColor }
     var renderedShortcutColor: NSColor { shortcutLabel.textColor ?? .secondaryLabelColor }
     var renderedIconAlpha: CGFloat { iconView.alphaValue }
+    var renderedStatusColor: NSColor { statusLabel.textColor ?? .secondaryLabelColor }
+    var renderedStatusText: String { statusLabel.stringValue }
+    var isStatusLabelHidden: Bool { statusLabel.isHidden }
+    var isRunningDotHidden: Bool { runningDot.isHidden }
+    var isUsingFallbackIcon: Bool { usingFallbackIcon }
 
     private func setupView() {
         let leadingStack = NSStackView()
@@ -102,26 +108,29 @@ final class MenuBarShortcutRowView: NSView {
         titleLabel.stringValue = presentation.titleText
         statusLabel.stringValue = presentation.statusText ?? ""
         statusLabel.isHidden = presentation.statusText == nil
-        runningDot.isHidden = !presentation.isRunning
+        runningDot.isHidden = !presentation.isEnabled || !presentation.isRunning
         shortcutLabel.stringValue = presentation.shortcutText ?? ""
         shortcutLabel.isHidden = presentation.shortcutText == nil
 
         if presentation.isEnabled {
             titleLabel.textColor = .labelColor
+            statusLabel.textColor = .secondaryLabelColor
             shortcutLabel.textColor = .secondaryLabelColor
             iconView.alphaValue = 1.0
         } else {
             titleLabel.textColor = .disabledControlTextColor
+            statusLabel.textColor = .disabledControlTextColor
             shortcutLabel.textColor = .disabledControlTextColor
             iconView.alphaValue = 0.5
         }
 
-        let icon = if let bundleIdentifier = presentation.bundleIdentifier {
-            AppIconCache.icon(for: bundleIdentifier) ?? Self.fallbackIcon
+        let resolvedIcon = if let bundleIdentifier = presentation.bundleIdentifier {
+            AppIconCache.icon(for: bundleIdentifier)
         } else {
-            Self.fallbackIcon
+            nil
         }
-        iconView.image = icon
+        usingFallbackIcon = resolvedIcon == nil
+        iconView.image = resolvedIcon ?? Self.fallbackIcon
     }
 
     private static let fallbackIcon = NSWorkspace.shared.icon(for: .application)
