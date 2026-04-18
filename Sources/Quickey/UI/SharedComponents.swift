@@ -46,9 +46,8 @@ extension View {
 
 // MARK: - App icon resolver
 
-/// Process-wide cache for bundle icons. `NSWorkspace.icon(forFile:)` decodes the
-/// ICNS/PNG on the main thread; without caching, every row in the picker/insights
-/// lists re-decodes on each render.
+/// `NSWorkspace.icon(forFile:)` decodes the ICNS on the main thread; without
+/// caching, every row in the picker / insights lists re-decodes on each render.
 @MainActor
 enum AppIconCache {
     private static var cache: [String: NSImage] = [:]
@@ -61,11 +60,6 @@ enum AppIconCache {
         let icon = NSWorkspace.shared.icon(forFile: url.path)
         cache[bundleIdentifier] = icon
         return icon
-    }
-
-    /// Drop cached entries for a bundle (e.g. if the app is uninstalled/moved).
-    static func invalidate(bundleIdentifier: String) {
-        cache.removeValue(forKey: bundleIdentifier)
     }
 }
 

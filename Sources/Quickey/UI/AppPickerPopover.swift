@@ -10,14 +10,13 @@ struct AppPickerPopover: View {
     @State private var highlightedIndex: Int?
     @Environment(\.dismiss) private var dismiss
 
-    /// Grouped result computed once per body evaluation. Computed properties
-    /// would re-run (and re-allocate a Set/filtered array) on each access;
-    /// SwiftUI reads these values several times per body render.
+    /// SwiftUI reads these lists several times per body render; computed
+    /// properties would re-filter on each access.
     private struct Sections {
-        var recent: [AppEntry]
-        var nonRecent: [AppEntry]
-        var all: [AppEntry]
-        var flat: [AppEntry]
+        let recent: [AppEntry]
+        let nonRecent: [AppEntry]
+        let all: [AppEntry]
+        let flat: [AppEntry]
     }
 
     private func computeSections() -> Sections {
