@@ -43,7 +43,7 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
     ])
 }
 
-@Test
+@Test @MainActor
 func consumeFirstLaunchFlagReturnsTrueOnceThenFalse() throws {
     let suiteName = "AppControllerTests.firstLaunch.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
