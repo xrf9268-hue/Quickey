@@ -95,6 +95,7 @@ Responsibilities:
 - choose target applications
 - record shortcuts
 - display saved bindings with inline usage stats
+- export/import shareable shortcut recipes with preview-first conflict handling
 - surface truthful shortcut readiness via `ShortcutCaptureStatus`
 - surface launch-at-login state via `LaunchAtLoginStatus`
 - show conflicts before saving
@@ -230,6 +231,24 @@ User opens settings
   -> PersistenceService.save()
   -> ShortcutCaptureCoordinator refreshes routed shortcuts / provider state
   -> onShortcutConfigurationChange triggers AppPreferences.refreshPermissions()
+```
+
+### 2A. Recipe import/export flow
+```text
+User clicks Export...
+  -> ShortcutEditorState.exportRecipeData() builds QuickeyRecipe(schemaVersion=1, shortcuts=[...])
+  -> NSSavePanel writes .quickeyrecipe JSON
+
+User clicks Import...
+  -> AppListProvider refreshes the installed-app catalog
+  -> NSOpenPanel reads .quickeyrecipe JSON
+  -> QuickeyRecipeCodec decodes and validates schemaVersion
+  -> QuickeyRecipeImportPlanner resolves each item by bundle ID, then app name
+  -> planner classifies entries into ready/conflict/unresolved preview state
+  -> user chooses Skip Conflicts or Replace Existing
+  -> ShortcutManager.save(updated shortcuts)
+  -> ShortcutStore.replaceAll()
+  -> PersistenceService.save()
 ```
 
 ### 3. Trigger flow

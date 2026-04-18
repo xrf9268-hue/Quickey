@@ -17,6 +17,7 @@ final class ShortcutManager {
     private let captureCoordinator: ShortcutCaptureCoordinator
     private let permissionService: any PermissionServicing
     private let usageTracker: UsageTracker?
+    private let appBundleLocator: AppBundleLocator
     private let diagnosticClient: DiagnosticClient
     private let keyMatcher = KeyMatcher()
     private var triggerIndex: [ShortcutTrigger: AppShortcut] = [:]
@@ -34,6 +35,7 @@ final class ShortcutManager {
         captureCoordinator: ShortcutCaptureCoordinator = ShortcutCaptureCoordinator(),
         permissionService: any PermissionServicing = AccessibilityPermissionService(),
         usageTracker: UsageTracker? = nil,
+        appBundleLocator: AppBundleLocator = AppBundleLocator(),
         diagnosticClient: DiagnosticClient
     ) {
         self.shortcutStore = shortcutStore
@@ -42,6 +44,7 @@ final class ShortcutManager {
         self.captureCoordinator = captureCoordinator
         self.permissionService = permissionService
         self.usageTracker = usageTracker
+        self.appBundleLocator = appBundleLocator
         self.diagnosticClient = diagnosticClient
     }
 
@@ -260,8 +263,11 @@ final class ShortcutManager {
     // MARK: - Key handling
 
     private func rebuildIndex() {
-        triggerIndex = keyMatcher.buildIndex(for: shortcutStore.shortcuts)
-        captureCoordinator.updateShortcuts(shortcutStore.shortcuts)
+        let activeShortcuts = shortcutStore.shortcuts.filter {
+            $0.isEnabled && appBundleLocator.applicationURL(for: $0.bundleIdentifier) != nil
+        }
+        triggerIndex = keyMatcher.buildIndex(for: activeShortcuts)
+        captureCoordinator.updateShortcuts(activeShortcuts)
     }
 
     /// Returns `true` if the key press matched a shortcut (so the event should be consumed).

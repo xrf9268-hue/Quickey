@@ -174,6 +174,7 @@ private func makeShortcutManager(
     standardProvider: FakeCaptureProvider = FakeCaptureProvider(),
     hyperProvider: FakeHyperCaptureProvider = FakeHyperCaptureProvider(),
     persistenceHarness: TestPersistenceHarness = TestPersistenceHarness(),
+    appBundleLocator: AppBundleLocator = makeTestAppBundleLocator(),
     diagnosticSink: @escaping @Sendable (String) -> Void = { _ in }
 ) -> (manager: ShortcutManager, standardProvider: FakeCaptureProvider, hyperProvider: FakeHyperCaptureProvider, persistenceHarness: TestPersistenceHarness) {
     let coordinator = ShortcutCaptureCoordinator(
@@ -186,6 +187,7 @@ private func makeShortcutManager(
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: coordinator,
         permissionService: permissionService,
+        appBundleLocator: appBundleLocator,
         diagnosticClient: .init(log: diagnosticSink)
     )
     return (manager, standardProvider, hyperProvider, persistenceHarness)
@@ -468,6 +470,7 @@ func accessibilityLossStopsAllShortcutCapture() {
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: coordinator,
         permissionService: permissionService,
+        appBundleLocator: makeTestAppBundleLocator(),
         diagnosticClient: .live
     )
 
@@ -523,6 +526,28 @@ func matchedShortcutEmitsTraceOnlyForMatchedKeys() {
     #expect(diagnostics.messages.contains { $0.contains("MATCHED: Safari - com.apple.Safari") })
     #expect(diagnostics.messages.contains { $0.contains("SHORTCUT_TRACE_DECISION event=matched bundle=com.apple.Safari") })
     #expect(diagnostics.messages.count == logCountAfterMatch)
+}
+
+@Test @MainActor
+func unavailableShortcutTargetsAreNotRegisteredOrMatched() {
+    let diagnostics = DiagnosticCapture()
+    let standardProvider = FakeCaptureProvider()
+    let (manager, _, _, _) = makeShortcutManager(
+        permissionService: FakePermissionService(ax: true, input: false),
+        standardProvider: standardProvider,
+        appBundleLocator: makeTestAppBundleLocator(resolvedBundleIdentifiers: []),
+        diagnosticSink: diagnostics.record
+    )
+    manager.save(shortcuts: [standardShortcut()])
+    manager.start()
+
+    standardProvider.emit(KeyPress(
+        keyCode: UInt16(kVK_ANSI_S),
+        modifiers: [.command, .shift]
+    ))
+
+    #expect(standardProvider.registeredShortcuts.isEmpty)
+    #expect(diagnostics.messages.contains { $0.contains("MATCHED:") } == false)
 }
 
 @Test @MainActor

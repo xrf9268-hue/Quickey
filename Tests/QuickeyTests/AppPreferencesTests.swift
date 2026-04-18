@@ -90,6 +90,7 @@ func setHyperKeyEnabledRefreshesShortcutCaptureStatusForHyperRoutingChanges() {
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: makeCaptureCoordinator(),
         permissionService: FakePermissionService(ax: true, input: false),
+        appBundleLocator: makeTestAppBundleLocator(),
         diagnosticClient: .live
     )
     manager.save(shortcuts: shortcutStore.shortcuts)
@@ -280,6 +281,7 @@ private func makeShortcutManager(
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: captureCoordinator,
         permissionService: permissionService,
+        appBundleLocator: makeTestAppBundleLocator(),
         diagnosticClient: .live
     )
 }
