@@ -17,7 +17,8 @@ final class AppController {
     )
     private lazy var menuBarController = MenuBarController(
         onOpenSettings: { [weak self] in self?.openSettings() },
-        onQuit: { NSApplication.shared.terminate(nil) }
+        onQuit: { NSApplication.shared.terminate(nil) },
+        shortcutStore: shortcutStore
     )
     private lazy var settingsWindowController = SettingsWindowController(
         shortcutStore: shortcutStore,

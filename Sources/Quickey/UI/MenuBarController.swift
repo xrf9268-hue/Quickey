@@ -1,5 +1,10 @@
 import AppKit
 
+enum MenuBarControllerMenuItemMarker {
+    static let shortcutRow = "quickey.menu-bar-controller.shortcut-row"
+    static let shortcutDivider = "quickey.menu-bar-controller.shortcut-divider"
+}
+
 enum MenuBarLaunchAtLoginToggleState: Equatable {
     case on
     case off
@@ -67,16 +72,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let onOpenSettings: () -> Void
     private let onQuit: () -> Void
     private let launchAtLoginService: LaunchAtLoginService
+    private let shortcutStore: ShortcutStore
+    private let runningBundleIdentifiers: @MainActor () -> Set<String>
     private var launchAtLoginItem: NSMenuItem?
 
     init(
         onOpenSettings: @escaping () -> Void,
         onQuit: @escaping () -> Void,
-        launchAtLoginService: LaunchAtLoginService = LaunchAtLoginService()
+        launchAtLoginService: LaunchAtLoginService = LaunchAtLoginService(),
+        shortcutStore: ShortcutStore = ShortcutStore(),
+        runningBundleIdentifiers: @escaping @MainActor () -> Set<String> = {
+            Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        }
     ) {
         self.onOpenSettings = onOpenSettings
         self.onQuit = onQuit
         self.launchAtLoginService = launchAtLoginService
+        self.shortcutStore = shortcutStore
+        self.runningBundleIdentifiers = runningBundleIdentifiers
         super.init()
     }
 
@@ -89,20 +102,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             button.image?.size = NSSize(width: 18, height: 18)
         }
 
-        let menu = NSMenu()
-        menu.delegate = self
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(.separator())
+        statusItem.menu = makeInstalledMenu()
+    }
 
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem = loginItem
-        menu.addItem(loginItem)
-        refreshLaunchAtLoginItem()
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
-        menu.items.forEach { $0.target = self }
+    func installMenuForTesting() -> NSMenu {
+        let menu = makeInstalledMenu()
         statusItem.menu = menu
+        return menu
     }
 
     @objc
@@ -135,6 +141,82 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         refreshLaunchAtLoginItem()
+        rebuildShortcutSection(in: menu, presentations: shortcutPresentations())
+    }
+
+    func rebuildShortcutSection(
+        in menu: NSMenu,
+        presentations: [MenuBarShortcutItemPresentation]
+    ) {
+        removeShortcutSection(from: menu)
+
+        guard !presentations.isEmpty else {
+            return
+        }
+
+        var insertionIndex = 0
+        for presentation in presentations {
+            menu.insertItem(makeShortcutItem(from: presentation), at: insertionIndex)
+            insertionIndex += 1
+        }
+        menu.insertItem(makeShortcutDivider(), at: insertionIndex)
+    }
+
+    func shortcutPresentations() -> [MenuBarShortcutItemPresentation] {
+        MenuBarShortcutItemPresentation.build(
+            from: shortcutStore.shortcuts,
+            runningBundleIdentifiers: runningBundleIdentifiers()
+        )
+    }
+
+    private func removeShortcutSection(from menu: NSMenu) {
+        for item in menu.items.reversed() where isShortcutSectionItem(item) {
+            menu.removeItem(item)
+        }
+    }
+
+    private func isShortcutSectionItem(_ item: NSMenuItem) -> Bool {
+        (item.representedObject as? String) == MenuBarControllerMenuItemMarker.shortcutRow
+            || (item.representedObject as? String) == MenuBarControllerMenuItemMarker.shortcutDivider
+    }
+
+    private func makeShortcutItem(from presentation: MenuBarShortcutItemPresentation) -> NSMenuItem {
+        let item = NSMenuItem(title: shortcutItemTitle(for: presentation), action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.view = MenuBarShortcutRowView(presentation: presentation)
+        item.representedObject = MenuBarControllerMenuItemMarker.shortcutRow
+        return item
+    }
+
+    private func makeShortcutDivider() -> NSMenuItem {
+        let item = NSMenuItem.separator()
+        item.representedObject = MenuBarControllerMenuItemMarker.shortcutDivider
+        return item
+    }
+
+    private func makeInstalledMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(.separator())
+
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem = loginItem
+        menu.addItem(loginItem)
+        refreshLaunchAtLoginItem()
+
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.items.forEach { $0.target = self }
+        rebuildShortcutSection(in: menu, presentations: shortcutPresentations())
+        return menu
+    }
+
+    private func shortcutItemTitle(for presentation: MenuBarShortcutItemPresentation) -> String {
+        if let statusText = presentation.statusText, !statusText.isEmpty {
+            return "\(presentation.titleText) (\(statusText))"
+        }
+        return presentation.titleText
     }
 
     private func refreshLaunchAtLoginItem() {
