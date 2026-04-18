@@ -100,6 +100,7 @@ private func makeShortcutManager(
         appSwitcher: FakeAppSwitcher(),
         captureCoordinator: captureCoordinator,
         permissionService: permissionService,
+        appBundleLocator: makeTestAppBundleLocator(),
         diagnosticClient: .live
     )
 }

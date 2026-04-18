@@ -77,6 +77,11 @@ final class AppListProvider {
         await refreshTask?.value
     }
 
+    func refreshAndWaitIfNeeded() async {
+        refreshIfNeeded()
+        await waitForRefreshForTesting()
+    }
+
     func filteredApps(query: String) -> [AppEntry] {
         guard !query.isEmpty else { return allApps }
         let lowered = query.lowercased()
@@ -84,6 +89,27 @@ final class AppListProvider {
             $0.name.lowercased().contains(lowered) ||
             $0.bundleIdentifier.lowercased().contains(lowered)
         }
+    }
+
+    func app(for bundleIdentifier: String) -> AppEntry? {
+        allAppsByID[bundleIdentifier]
+    }
+
+    func apps(named appName: String) -> [AppEntry] {
+        allApps.filter {
+            $0.name.compare(
+                appName,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) == .orderedSame
+        }
+    }
+
+    var hasScannedApps: Bool {
+        lastScanTime != nil
+    }
+
+    func isInstalled(bundleIdentifier: String) -> Bool {
+        allAppsByID[bundleIdentifier] != nil
     }
 
     // MARK: - Scanning
