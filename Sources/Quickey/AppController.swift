@@ -3,10 +3,13 @@ import ApplicationServices
 
 @MainActor
 final class AppController {
+    static let firstLaunchCompletedDefaultsKey = "com.quickey.firstLaunchCompleted"
+
     private let shortcutStore = ShortcutStore()
     private let persistenceService = PersistenceService()
     private let usageTracker = UsageTracker()
     private let hyperKeyService = HyperKeyService()
+    private let userDefaults: UserDefaults
     private lazy var appSwitcher = AppSwitcher()
     private lazy var shortcutManager = ShortcutManager(
         shortcutStore: shortcutStore,
@@ -26,6 +29,10 @@ final class AppController {
         hyperKeyService: hyperKeyService
     )
 
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
     func start() {
         DiagnosticLog.rotateIfNeeded()
         DiagnosticLog.log("Quickey starting, version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
@@ -42,7 +49,14 @@ final class AppController {
             isHyperEnabled: { hyperKeyService.isEnabled },
             setHyperKeyEnabled: { shortcutManager.setHyperKeyEnabled($0) },
             startShortcutManager: { shortcutManager.start() },
-            installMenuBar: { menuBarController.install() }
+            installMenuBar: { menuBarController.install() },
+            isFirstLaunch: { [userDefaults] in
+                !userDefaults.bool(forKey: Self.firstLaunchCompletedDefaultsKey)
+            },
+            markFirstLaunchComplete: { [userDefaults] in
+                userDefaults.set(true, forKey: Self.firstLaunchCompletedDefaultsKey)
+            },
+            openSettings: { [weak self] in self?.openSettings() }
         )
     }
 
@@ -63,7 +77,10 @@ final class AppController {
         isHyperEnabled: @MainActor () -> Bool,
         setHyperKeyEnabled: @MainActor (Bool) -> Void,
         startShortcutManager: @MainActor () -> Void,
-        installMenuBar: @MainActor () -> Void
+        installMenuBar: @MainActor () -> Void,
+        isFirstLaunch: @MainActor () -> Bool,
+        markFirstLaunchComplete: @MainActor () -> Void,
+        openSettings: @MainActor () -> Void
     ) {
         do {
             replaceShortcuts(try loadShortcuts())
@@ -76,5 +93,9 @@ final class AppController {
         setHyperKeyEnabled(isHyperEnabled())
         startShortcutManager()
         installMenuBar()
+        if isFirstLaunch() {
+            openSettings()
+            markFirstLaunchComplete()
+        }
     }
 }
