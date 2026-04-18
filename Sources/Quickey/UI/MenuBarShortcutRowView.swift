@@ -108,7 +108,7 @@ final class MenuBarShortcutRowView: NSView {
         titleLabel.stringValue = presentation.titleText
         statusLabel.stringValue = presentation.statusText ?? ""
         statusLabel.isHidden = presentation.statusText == nil
-        runningDot.isHidden = !presentation.isEnabled || !presentation.isRunning
+        runningDot.isHidden = !presentation.isRunning
         shortcutLabel.stringValue = presentation.shortcutText ?? ""
         shortcutLabel.isHidden = presentation.shortcutText == nil
 

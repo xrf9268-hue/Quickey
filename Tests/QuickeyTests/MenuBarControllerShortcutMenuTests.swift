@@ -288,7 +288,7 @@ struct MenuBarControllerShortcutMenuTests {
     }
 
     @Test @MainActor
-    func disabledRunningShortcutRow_suppressesBrightRunningIndicatorAndUsesFallbackIconWhenNeeded() {
+    func disabledRunningShortcutRow_keepsRunningIndicatorVisibleAndUsesFallbackIconWhenNeeded() {
         let controller = MenuBarController(onOpenSettings: {}, onQuit: {})
         let menu = NSMenu()
         let presentation = MenuBarShortcutItemPresentation(
@@ -305,7 +305,7 @@ struct MenuBarControllerShortcutMenuTests {
 
         let row = try #require(menu.items[0].view as? MenuBarShortcutRowView)
 
-        #expect(row.isRunningDotHidden == true)
+        #expect(row.isRunningDotHidden == false)
         #expect(row.isUsingFallbackIcon == true)
     }
 }
