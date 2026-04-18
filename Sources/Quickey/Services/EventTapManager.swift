@@ -112,13 +112,15 @@ func handleEventTapEvent(
         #if DEBUG
         // Near-miss diagnostic: log when keyCode matches a registered shortcut
         // but modifiers differ (e.g. spurious numericPad/help/undocumented bits).
+        // Uses the precomputed keyCode side-index for O(1) lookup to avoid
+        // scanning the full shortcut set on every keystroke.
         if !swallow && !injectHyper {
             let rawFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
             let rawDeviceIndep = rawFlags.intersection(.deviceIndependentFlagsMask).rawValue
             let normalized = KeyMatcher.normalizedFlags(from: rawFlags).rawValue
             if rawDeviceIndep != normalized {
                 let hasKeyCodeMatch = box.withLock {
-                    box._registeredShortcuts.contains { $0.keyCode == keyCode }
+                    box._registeredKeyCodes.contains(keyCode)
                 }
                 if hasKeyCodeMatch {
                     DispatchQueue.global(qos: .utility).async {
@@ -772,6 +774,10 @@ final class EventTapBox {
     // fileprivate so the C callback (defined in EventTapManager.start) can
     // access them inside withLock critical sections.
     fileprivate var _registeredShortcuts: Set<KeyPress> = []
+    /// KeyCode-only side-index kept in sync with `_registeredShortcuts`. Used by
+    /// the DEBUG near-miss diagnostic for O(1) keyCode-match checks on the hot
+    /// event-tap path without scanning the full keypress set.
+    fileprivate var _registeredKeyCodes: Set<CGKeyCode> = []
     fileprivate var _hyperKeyEnabled: Bool = false
     fileprivate var _isHyperHeld: Bool = false
     /// CGEvent.timestamp (nanoseconds since startup) of the most recent F19
@@ -796,7 +802,13 @@ final class EventTapBox {
 
     var registeredShortcuts: Set<KeyPress> {
         get { withLock { _registeredShortcuts } }
-        set { withLock { _registeredShortcuts = newValue } }
+        set {
+            let keyCodes = Set(newValue.map { $0.keyCode })
+            withLock {
+                _registeredShortcuts = newValue
+                _registeredKeyCodes = keyCodes
+            }
+        }
     }
     var hyperKeyEnabled: Bool {
         get { withLock { _hyperKeyEnabled } }

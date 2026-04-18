@@ -46,6 +46,29 @@ extension View {
 
 // MARK: - App icon resolver
 
+/// Process-wide cache for bundle icons. `NSWorkspace.icon(forFile:)` decodes the
+/// ICNS/PNG on the main thread; without caching, every row in the picker/insights
+/// lists re-decodes on each render.
+@MainActor
+enum AppIconCache {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for bundleIdentifier: String) -> NSImage? {
+        if let cached = cache[bundleIdentifier] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        cache[bundleIdentifier] = icon
+        return icon
+    }
+
+    /// Drop cached entries for a bundle (e.g. if the app is uninstalled/moved).
+    static func invalidate(bundleIdentifier: String) {
+        cache.removeValue(forKey: bundleIdentifier)
+    }
+}
+
 struct AppIconView: View {
     let bundleIdentifier: String
     let size: CGFloat
@@ -63,11 +86,7 @@ struct AppIconView: View {
     }
 
     private func resolveIcon() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
-            icon = NSWorkspace.shared.icon(forFile: url.path)
-        } else {
-            icon = Self.fallbackIcon
-        }
+        icon = AppIconCache.icon(for: bundleIdentifier) ?? Self.fallbackIcon
     }
 
     private static let fallbackIcon = NSWorkspace.shared.icon(for: .application)
