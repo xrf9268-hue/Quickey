@@ -3,10 +3,13 @@ import ApplicationServices
 
 @MainActor
 final class AppController {
+    static let firstLaunchCompletedDefaultsKey = "com.quickey.firstLaunchCompleted"
+
     private let shortcutStore = ShortcutStore()
     private let persistenceService = PersistenceService()
     private let usageTracker = UsageTracker()
     private let hyperKeyService = HyperKeyService()
+    private let userDefaults: UserDefaults
     private lazy var appSwitcher = AppSwitcher()
     private lazy var shortcutManager = ShortcutManager(
         shortcutStore: shortcutStore,
@@ -26,6 +29,10 @@ final class AppController {
         hyperKeyService: hyperKeyService
     )
 
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
     func start() {
         DiagnosticLog.rotateIfNeeded()
         DiagnosticLog.log("Quickey starting, version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
@@ -44,6 +51,13 @@ final class AppController {
             startShortcutManager: { shortcutManager.start() },
             installMenuBar: { menuBarController.install() }
         )
+
+        if Self.consumeFirstLaunchFlag(
+            userDefaults: userDefaults,
+            hasExistingShortcuts: !shortcutStore.shortcuts.isEmpty
+        ) {
+            openSettings()
+        }
     }
 
     func stop() {
@@ -76,5 +90,18 @@ final class AppController {
         setHyperKeyEnabled(isHyperEnabled())
         startShortcutManager()
         installMenuBar()
+    }
+
+    /// Returns true exactly once per install, and only when no shortcuts exist yet.
+    /// Marks the flag synchronously so a crash in the caller's follow-up work won't
+    /// cause a re-prompt. Existing users upgrading from a pre-flag build (who already
+    /// have shortcuts) get silently marked as onboarded without seeing the prompt.
+    static func consumeFirstLaunchFlag(
+        userDefaults: UserDefaults,
+        hasExistingShortcuts: Bool
+    ) -> Bool {
+        guard !userDefaults.bool(forKey: firstLaunchCompletedDefaultsKey) else { return false }
+        userDefaults.set(true, forKey: firstLaunchCompletedDefaultsKey)
+        return !hasExistingShortcuts
     }
 }

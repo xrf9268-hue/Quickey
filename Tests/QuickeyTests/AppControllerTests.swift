@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Quickey
 
@@ -40,4 +41,24 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
         "startShortcutManager",
         "installMenuBar"
     ])
+}
+
+@Test @MainActor
+func consumeFirstLaunchFlagReturnsTrueOnceForFreshInstall() throws {
+    let suiteName = "AppControllerTests.firstLaunch.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == true)
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == false)
+}
+
+@Test @MainActor
+func consumeFirstLaunchFlagSilentlyMarksMigratingUsersOnboarded() throws {
+    let suiteName = "AppControllerTests.firstLaunch.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: true) == false)
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == false)
 }
