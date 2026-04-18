@@ -7,12 +7,13 @@ Quickey now has a dual-track release model:
 1. Build the release binary
 2. Package `build/Quickey.app`
 3. Embed and sign `Sparkle.framework` inside the app bundle
-4. Package `build/Quickey-<version>.zip` for Sparkle updates
-5. Generate `build/appcast.xml`
-6. Package `build/Quickey-<version>.dmg`
-7. Sign, notarize, staple, and validate the DMG
-8. Upload the DMG to GitHub Releases
-9. Upload the Sparkle ZIP and `appcast.xml` to Cloudflare R2
+4. Notarize and staple `build/Quickey.app`
+5. Package `build/Quickey-<version>.zip` for Sparkle updates
+6. Generate `build/appcast.xml`
+7. Package `build/Quickey-<version>.dmg`
+8. Sign, notarize, staple, and validate the DMG
+9. Upload the DMG to GitHub Releases
+10. Upload the Sparkle ZIP and `appcast.xml` to Cloudflare R2
 
 The split is intentional:
 
@@ -160,14 +161,15 @@ Sparkle and R2 publishing:
 2. Run `swift test`
 3. Run `scripts/package-app.sh` in hardened runtime signing mode with `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY`
 4. Verify the signed app with `codesign`, `spctl`, and a framework presence check
-5. Run `scripts/package-update-zip.sh`
-6. Run `scripts/generate-appcast.sh`
-7. Run `scripts/package-dmg.sh` with `DMG_SIGN_IDENTITY`
-8. Submit the DMG with `xcrun notarytool submit --wait`
-9. Staple and validate the DMG
-10. Upload the Sparkle ZIP to R2
-11. Create or update the GitHub Release and upload `Quickey-<version>.dmg`
-12. Upload `appcast.xml` to R2 last so the feed only points at already-published artifacts
+5. Submit `build/Quickey.app` for notarization, staple it, and validate it
+6. Run `scripts/package-update-zip.sh` from the notarized app bundle
+7. Run `scripts/generate-appcast.sh`
+8. Run `scripts/package-dmg.sh` with `DMG_SIGN_IDENTITY`
+9. Submit the DMG with `xcrun notarytool submit --wait`
+10. Staple and validate the DMG
+11. Upload the Sparkle ZIP to R2
+12. Create or update the GitHub Release and upload `Quickey-<version>.dmg`
+13. Upload `appcast.xml` to R2 last so the feed only points at already-published artifacts
 
 The workflow is fail-closed:
 
@@ -210,14 +212,15 @@ The internal package path is for trusted testers only.
 1. Update `CFBundleShortVersionString` and `CFBundleVersion` in [`Info.plist`](../Sources/Quickey/Resources/Info.plist)
 2. Run `swift test`
 3. Run `bash scripts/package-app.sh`
-4. Run `bash scripts/package-update-zip.sh`
-5. Run `SPARKLE_PUBLIC_BASE_URL=... SPARKLE_PRIVATE_ED_KEY=... bash scripts/generate-appcast.sh`
-6. Run `bash scripts/package-dmg.sh`
-7. Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`
-8. If you need to rerun release automation manually, open `Release`, keep the branch on the default branch, and set `release_tag` to the existing `vX.Y.Z`
-9. Confirm the `Release` workflow succeeds
-10. Validate the GitHub Release DMG on a clean macOS machine
-11. Validate Sparkle update checks against the published R2 `appcast.xml` on a real installed build
+4. Notarize and staple `build/Quickey.app`
+5. Run `bash scripts/package-update-zip.sh`
+6. Run `SPARKLE_PUBLIC_BASE_URL=... SPARKLE_PRIVATE_ED_KEY=... bash scripts/generate-appcast.sh`
+7. Run `bash scripts/package-dmg.sh`
+8. Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`
+9. If you need to rerun release automation manually, open `Release`, keep the branch on the default branch, and set `release_tag` to the existing `vX.Y.Z`
+10. Confirm the `Release` workflow succeeds
+11. Validate the GitHub Release DMG on a clean macOS machine
+12. Validate Sparkle update checks against the published R2 `appcast.xml` on a real installed build
 
 If release secrets are missing, use the `Internal Package` workflow for DMG-only tester builds until the full release credentials exist.
 
@@ -243,6 +246,7 @@ Signed release verification:
 
 ```bash
 codesign --verify --deep --strict --verbose=2 build/Quickey.app
+xcrun stapler validate build/Quickey.app
 spctl --assess --type exec --verbose build/Quickey.app
 xcrun stapler validate build/Quickey-<version>.dmg
 spctl --assess --type open --context context:primary-signature --verbose build/Quickey-<version>.dmg

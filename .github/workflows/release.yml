@@ -242,6 +242,25 @@ jobs:
           spctl --assess --type exec --verbose build/Quickey.app
           test -d build/Quickey.app/Contents/Frameworks/Sparkle.framework
 
+      - name: Submit app bundle for notarization
+        env:
+          NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
+          NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
+        run: |
+          xcrun notarytool submit build/Quickey.app \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$NOTARYTOOL_KEY_ID" \
+            --issuer "$NOTARYTOOL_ISSUER" \
+            --wait
+
+      - name: Staple app notarization ticket
+        run: xcrun stapler staple build/Quickey.app
+
+      - name: Validate notarized app bundle
+        run: |
+          xcrun stapler validate build/Quickey.app
+          spctl --assess --type exec --verbose build/Quickey.app
+
       - name: Package Sparkle update ZIP
         run: bash scripts/package-update-zip.sh
 

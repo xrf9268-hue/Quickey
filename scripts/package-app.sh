@@ -22,7 +22,41 @@ SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
 
 find_sparkle_framework() {
-    find "$PROJECT_DIR/.build/artifacts" -path '*/Sparkle.framework' -type d -print -quit 2>/dev/null
+    local -a candidates=()
+    local xcframework_plist=""
+
+    while IFS= read -r xcframework_plist; do
+        local candidate=""
+        candidate="$(python3 - "$xcframework_plist" <<'PY'
+import plistlib
+import pathlib
+import sys
+
+plist_path = pathlib.Path(sys.argv[1])
+with plist_path.open('rb') as handle:
+    info = plistlib.load(handle)
+
+for library in info.get("AvailableLibraries", []):
+    if library.get("SupportedPlatform") == "macos":
+        print(plist_path.parent / library["LibraryIdentifier"] / library["LibraryPath"])
+        break
+PY
+)"
+
+        if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+            candidates+=("$candidate")
+        fi
+    done < <(find "$PROJECT_DIR/.build/artifacts" -path '*/Sparkle.xcframework/Info.plist' -type f 2>/dev/null | sort)
+
+    if [ "${#candidates[@]}" -gt 1 ]; then
+        echo "Error: multiple macOS Sparkle.framework candidates found in SwiftPM artifacts." >&2
+        printf '  %s\n' "${candidates[@]}" >&2
+        return 1
+    fi
+
+    if [ "${#candidates[@]}" -eq 1 ]; then
+        printf '%s\n' "${candidates[0]}"
+    fi
 }
 
 apply_sparkle_info_overrides() {
@@ -61,7 +95,10 @@ if [ ! -f "$BINARY" ]; then
     exit 1
 fi
 
-SPARKLE_FRAMEWORK_SOURCE="$(find_sparkle_framework)"
+if ! SPARKLE_FRAMEWORK_SOURCE="$(find_sparkle_framework)"; then
+    exit 1
+fi
+
 if [ -z "$SPARKLE_FRAMEWORK_SOURCE" ]; then
     echo "Error: Sparkle.framework not found in SwiftPM artifacts. Build may not have resolved the Sparkle package." >&2
     exit 1
