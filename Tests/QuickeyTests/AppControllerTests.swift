@@ -44,12 +44,21 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
 }
 
 @Test @MainActor
-func consumeFirstLaunchFlagReturnsTrueOnceThenFalse() throws {
+func consumeFirstLaunchFlagReturnsTrueOnceForFreshInstall() throws {
     let suiteName = "AppControllerTests.firstLaunch.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
-    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults) == true)
-    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults) == false)
-    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults) == false)
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == true)
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == false)
+}
+
+@Test @MainActor
+func consumeFirstLaunchFlagSilentlyMarksMigratingUsersOnboarded() throws {
+    let suiteName = "AppControllerTests.firstLaunch.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: true) == false)
+    #expect(AppController.consumeFirstLaunchFlag(userDefaults: defaults, hasExistingShortcuts: false) == false)
 }

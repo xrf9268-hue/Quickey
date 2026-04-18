@@ -52,7 +52,10 @@ final class AppController {
             installMenuBar: { menuBarController.install() }
         )
 
-        if Self.consumeFirstLaunchFlag(userDefaults: userDefaults) {
+        if Self.consumeFirstLaunchFlag(
+            userDefaults: userDefaults,
+            hasExistingShortcuts: !shortcutStore.shortcuts.isEmpty
+        ) {
             openSettings()
         }
     }
@@ -89,11 +92,16 @@ final class AppController {
         installMenuBar()
     }
 
-    /// Returns true exactly once per install: marks the flag synchronously before
-    /// returning so a crash in the caller's follow-up work won't cause a re-prompt.
-    static func consumeFirstLaunchFlag(userDefaults: UserDefaults) -> Bool {
+    /// Returns true exactly once per install, and only when no shortcuts exist yet.
+    /// Marks the flag synchronously so a crash in the caller's follow-up work won't
+    /// cause a re-prompt. Existing users upgrading from a pre-flag build (who already
+    /// have shortcuts) get silently marked as onboarded without seeing the prompt.
+    static func consumeFirstLaunchFlag(
+        userDefaults: UserDefaults,
+        hasExistingShortcuts: Bool
+    ) -> Bool {
         guard !userDefaults.bool(forKey: firstLaunchCompletedDefaultsKey) else { return false }
         userDefaults.set(true, forKey: firstLaunchCompletedDefaultsKey)
-        return true
+        return !hasExistingShortcuts
     }
 }
