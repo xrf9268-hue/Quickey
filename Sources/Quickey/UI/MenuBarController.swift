@@ -102,20 +102,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             button.image?.size = NSSize(width: 18, height: 18)
         }
 
-        let menu = NSMenu()
-        menu.delegate = self
-        menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(.separator())
+        statusItem.menu = makeInstalledMenu()
+    }
 
-        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem = loginItem
-        menu.addItem(loginItem)
-        refreshLaunchAtLoginItem()
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
-        menu.items.forEach { $0.target = self }
+    func installMenuForTesting() -> NSMenu {
+        let menu = makeInstalledMenu()
         statusItem.menu = menu
+        return menu
     }
 
     @objc
@@ -148,6 +141,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         refreshLaunchAtLoginItem()
+        rebuildShortcutSection(in: menu, presentations: shortcutPresentations())
     }
 
     func rebuildShortcutSection(
@@ -187,8 +181,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func makeShortcutItem(from presentation: MenuBarShortcutItemPresentation) -> NSMenuItem {
-        let item = NSMenuItem(title: presentation.titleText, action: nil, keyEquivalent: "")
-        item.isEnabled = presentation.isEnabled
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.view = MenuBarShortcutRowView(presentation: presentation)
         item.representedObject = MenuBarControllerMenuItemMarker.shortcutRow
         return item
     }
@@ -197,6 +192,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let item = NSMenuItem.separator()
         item.representedObject = MenuBarControllerMenuItemMarker.shortcutDivider
         return item
+    }
+
+    private func makeInstalledMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+        menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(.separator())
+
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem = loginItem
+        menu.addItem(loginItem)
+        refreshLaunchAtLoginItem()
+
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.items.forEach { $0.target = self }
+        rebuildShortcutSection(in: menu, presentations: shortcutPresentations())
+        return menu
     }
 
     private func refreshLaunchAtLoginItem() {
