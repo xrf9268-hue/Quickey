@@ -6,6 +6,9 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
     var events: [String] = []
 
     AppController.runStartupSequence(
+        startUpdateService: {
+            events.append("startUpdateService")
+        },
         loadShortcuts: {
             events.append("load")
             return []
@@ -32,6 +35,7 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
     )
 
     #expect(events == [
+        "startUpdateService",
         "load",
         "replace",
         "reapplyHyper",
@@ -40,4 +44,45 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
         "startShortcutManager",
         "installMenuBar"
     ])
+}
+
+@Test @MainActor
+func startupSequenceStartsUpdateServiceBeforeShortcutManager() {
+    var events: [String] = []
+
+    AppController.runStartupSequence(
+        startUpdateService: {
+            events.append("startUpdateService")
+        },
+        loadShortcuts: {
+            events.append("load")
+            return []
+        },
+        replaceShortcuts: { _ in
+            events.append("replace")
+        },
+        reapplyHyperIfNeeded: {
+            events.append("reapplyHyper")
+        },
+        isHyperEnabled: {
+            events.append("readHyperEnabled")
+            return false
+        },
+        setHyperKeyEnabled: { enabled in
+            events.append("setHyper:\(enabled)")
+        },
+        startShortcutManager: {
+            events.append("startShortcutManager")
+        },
+        installMenuBar: {
+            events.append("installMenuBar")
+        }
+    )
+
+    let startUpdateIndex = events.firstIndex(of: "startUpdateService")
+    let startShortcutIndex = events.firstIndex(of: "startShortcutManager")
+
+    #expect(startUpdateIndex != nil)
+    #expect(startShortcutIndex != nil)
+    #expect(startUpdateIndex! < startShortcutIndex!)
 }
