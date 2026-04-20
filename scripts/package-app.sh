@@ -99,6 +99,8 @@ else
 
     echo "==> Ad-hoc signing app bundle (no '$SIGN_IDENTITY' cert found)."
     echo "    TCC permissions may need re-granting after each rebuild."
+    echo "    If System Settings still shows 'Wink' but this build logs ax=false/im=false,"
+    echo "    remove the stale row and re-add: $APP_DIR"
     echo "    To fix: create a self-signed cert named '$SIGN_IDENTITY' in Keychain Access."
     codesign --force --sign - --identifier "$BUNDLE_ID" "$APP_DIR" 2>&1
 fi
