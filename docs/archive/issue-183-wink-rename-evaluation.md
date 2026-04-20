@@ -19,13 +19,12 @@ Before the clean-break rename was executed, the main concern was that a full ren
 
 The clean-break implementation resolved that concern by choosing not to preserve a migration layer. This archival note keeps the original risk framing for context, but the executed outcome is the direct `Wink` rename recorded below.
 
-## Guardrails for a future rename
+## Post-rename follow-up notes
 
-These were the pre-rename guardrails that would have applied if the project had chosen compatibility-preserving migration instead of a clean break:
+The clean-break execution deliberately avoided any compatibility layer for legacy `Quickey` paths or bundle identifiers. The practical follow-up is to validate the packaged app on macOS with the live permission and event-tap flow, then update any remaining docs or release notes that still describe the old identity as current state.
 
-1. No compatibility layer is preserved for legacy `Quickey` paths or bundle identifiers.
-2. Validate the clean-break rename on macOS using the packaged app and the live permission / event-tap flow.
-3. Update any remaining docs or release notes that still describe the old identity as current state.
+1. Validate the clean-break rename on macOS using the packaged app and the live permission / event-tap flow.
+2. Update any remaining docs or release notes that still describe the old identity as current state.
 
 ## Implementation status for Issue #183
 
