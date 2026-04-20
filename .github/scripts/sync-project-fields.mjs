@@ -12,7 +12,7 @@ import {
 } from './lib/project-automation.mjs';
 
 const apiVersion = '2022-11-28';
-const projectTitle = 'Wink Backlog';
+const preferredProjectTitles = ['Wink Backlog', 'Quickey Backlog'];
 const statusFieldName = 'Status';
 const runtimeValidationFieldName = 'Runtime Validation';
 
@@ -66,6 +66,7 @@ async function restRequest(pathname) {
 }
 
 async function resolveProject(owner, repo) {
+  const projectQuery = preferredProjectTitles.join(' ');
   const data = await graphqlRequest(
     `
       query ResolveProject($owner: String!, $repo: String!, $projectQuery: String!) {
@@ -93,14 +94,18 @@ async function resolveProject(owner, repo) {
         }
       }
     `,
-    { owner, repo, projectQuery: projectTitle },
+    { owner, repo, projectQuery },
   );
 
   const projects = data.repository.owner.projectsV2.nodes;
-  const project = projects.find((candidate) => candidate.title === projectTitle);
+  const project = preferredProjectTitles
+    .map((title) => projects.find((candidate) => candidate.title === title))
+    .find(Boolean);
 
   if (!project) {
-    throw new Error(`Project "${projectTitle}" was not found for ${owner}.`);
+    throw new Error(
+      `Project "${preferredProjectTitles.join('" or "')}" was not found for ${owner}.`,
+    );
   }
 
   return project;
