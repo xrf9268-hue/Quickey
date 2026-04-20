@@ -143,7 +143,7 @@ func LaunchAtLoginPresentation_requiresApprovalMapsToInformationalStateWithOpenS
     #expect(presentation.toggleIsOn == true)
     #expect(presentation.toggleIsEnabled == true)
     #expect(presentation.messageStyle == .informational)
-    #expect(presentation.message == "Quickey is registered to launch at login, but macOS still needs your approval in Login Items.")
+    #expect(presentation.message == "Wink is registered to launch at login, but macOS still needs your approval in Login Items.")
     #expect(presentation.showsOpenSettingsButton == true)
 }
 
@@ -151,14 +151,14 @@ func LaunchAtLoginPresentation_requiresApprovalMapsToInformationalStateWithOpenS
 func LaunchAtLoginPresentation_notFoundMapsToDisabledErrorStateWithoutOpenSettingsCTA() {
     let preferences = makePreferences(
         status: .notFound,
-        bundleURL: URL(fileURLWithPath: "/Applications/Quickey.app")
+        bundleURL: URL(fileURLWithPath: "/Applications/Wink.app")
     )
 
     let presentation = preferences.launchAtLoginPresentation
     #expect(presentation.toggleIsOn == false)
     #expect(presentation.toggleIsEnabled == false)
     #expect(presentation.messageStyle == .error)
-    #expect(presentation.message == "Quickey couldn't find its login item configuration. This usually points to an installation or packaging problem.")
+    #expect(presentation.message == "Wink couldn't find its login item configuration. This usually points to an installation or packaging problem.")
     #expect(presentation.showsOpenSettingsButton == false)
 }
 
@@ -166,14 +166,14 @@ func LaunchAtLoginPresentation_notFoundMapsToDisabledErrorStateWithoutOpenSettin
 func LaunchAtLoginPresentation_notFoundOutsideApplicationsShowsInstallGuidance() {
     let preferences = makePreferences(
         status: .notFound,
-        bundleURL: URL(fileURLWithPath: "/Users/yvan/developer/Quickey/build/Quickey.app")
+        bundleURL: URL(fileURLWithPath: "/Users/yvan/developer/Quickey/build/Wink.app")
     )
 
     let presentation = preferences.launchAtLoginPresentation
     #expect(presentation.toggleIsOn == false)
     #expect(presentation.toggleIsEnabled == false)
     #expect(presentation.messageStyle == .informational)
-    #expect(presentation.message == "Launch at Login is only available after installing Quickey.app in the Applications folder and reopening it.")
+    #expect(presentation.message == "Launch at Login is only available after installing Wink.app in the Applications folder and reopening it.")
     #expect(presentation.showsOpenSettingsButton == false)
 }
 
@@ -327,7 +327,7 @@ private func makeLaunchAtLoginService(state: MutableLaunchAtLoginState) -> Launc
             state.statusValue = .notRegistered
         },
         openSystemSettingsLoginItems: {},
-        bundleURL: { URL(fileURLWithPath: "/Applications/Quickey.app") },
+        bundleURL: { URL(fileURLWithPath: "/Applications/Wink.app") },
         applicationDirectories: {
             [
                 URL(fileURLWithPath: "/Applications", isDirectory: true),
@@ -342,7 +342,7 @@ private func makePreferences(
     status: SMAppService.Status = .notRegistered,
     state: MutableLaunchAtLoginState? = nil,
     openSystemSettingsLoginItems: @escaping @Sendable () -> Void = {},
-    bundleURL: URL = URL(fileURLWithPath: "/Applications/Quickey.app")
+    bundleURL: URL = URL(fileURLWithPath: "/Applications/Wink.app")
 ) -> AppPreferences {
     let launchAtLoginState = state ?? MutableLaunchAtLoginState(status: status)
     return AppPreferences(

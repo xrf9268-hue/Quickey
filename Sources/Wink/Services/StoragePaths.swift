@@ -1,7 +1,7 @@
 import Foundation
 
 enum StoragePaths {
-    static let appDirectoryName = "Quickey"
+    static let appDirectoryName = "Wink"
 
     static func appSupportDirectory() -> URL? {
         let fm = FileManager.default

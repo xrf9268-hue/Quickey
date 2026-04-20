@@ -22,7 +22,7 @@ struct PersistenceServiceDiskLoadingTests {
         service.save(shortcuts)
 
         let liveShortcutsURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Quickey", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Wink", isDirectory: true)
             .appendingPathComponent("shortcuts.json")
 
         #expect(harness.shortcutsURL != liveShortcutsURL)

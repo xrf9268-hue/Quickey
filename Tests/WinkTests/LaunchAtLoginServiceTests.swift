@@ -26,7 +26,7 @@ func notFoundOutsideApplicationsRequiresAppInstallation() {
         register: {},
         unregister: {},
         openSystemSettingsLoginItems: {},
-        bundleURL: { URL(fileURLWithPath: "/Users/yvan/developer/Quickey/build/Quickey.app") },
+        bundleURL: { URL(fileURLWithPath: "/Users/yvan/developer/Quickey/build/Wink.app") },
         applicationDirectories: {
             [
                 URL(fileURLWithPath: "/Applications", isDirectory: true),
@@ -46,7 +46,7 @@ func notFoundInsideApplicationsStaysConfigurationMissing() {
         register: {},
         unregister: {},
         openSystemSettingsLoginItems: {},
-        bundleURL: { URL(fileURLWithPath: "/Applications/Quickey.app") },
+        bundleURL: { URL(fileURLWithPath: "/Applications/Wink.app") },
         applicationDirectories: {
             [
                 URL(fileURLWithPath: "/Applications", isDirectory: true),

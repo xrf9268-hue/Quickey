@@ -49,7 +49,7 @@ final class AppPreferences {
             LaunchAtLoginPresentation(
                 toggleIsOn: true,
                 toggleIsEnabled: true,
-                message: "Quickey is registered to launch at login, but macOS still needs your approval in Login Items.",
+                message: "Wink is registered to launch at login, but macOS still needs your approval in Login Items.",
                 messageStyle: .informational,
                 showsOpenSettingsButton: true
             )
@@ -59,7 +59,7 @@ final class AppPreferences {
                 LaunchAtLoginPresentation(
                     toggleIsOn: false,
                     toggleIsEnabled: false,
-                    message: "Launch at Login is only available after installing Quickey.app in the Applications folder and reopening it.",
+                    message: "Launch at Login is only available after installing Wink.app in the Applications folder and reopening it.",
                     messageStyle: .informational,
                     showsOpenSettingsButton: false
                 )
@@ -67,7 +67,7 @@ final class AppPreferences {
                 LaunchAtLoginPresentation(
                     toggleIsOn: false,
                     toggleIsEnabled: false,
-                    message: "Quickey couldn't find its login item configuration. This usually points to an installation or packaging problem.",
+                    message: "Wink couldn't find its login item configuration. This usually points to an installation or packaging problem.",
                     messageStyle: .error,
                     showsOpenSettingsButton: false
                 )

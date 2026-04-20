@@ -4,7 +4,7 @@
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Wink</string>
-  <key>CFBundleIdentifier</key><string>com.quickey.app</string>
+  <key>CFBundleIdentifier</key><string>com.wink.app</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Wink</string>
   <key>CFBundleDisplayName</key><string>Wink</string>
@@ -19,7 +19,7 @@
   <key>NSHighResolutionCapable</key><true/>
   <key>OSLogPreferences</key>
   <dict>
-    <key>com.quickey.app</key>
+    <key>com.wink.app</key>
     <dict>
       <key>DEFAULT-OPTIONS</key>
       <dict>

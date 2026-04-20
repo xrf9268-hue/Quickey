@@ -16,7 +16,7 @@ final class DiagnosticLogWriter: @unchecked Sendable {
         formatter: ISO8601DateFormatter = ISO8601DateFormatter(),
         maxFileSize: UInt64 = 512 * 1024,
         rotationCheckInterval: UInt64 = 64 * 1024,
-        queue: DispatchQueue = DispatchQueue(label: "com.quickey.diagnostic-log")
+        queue: DispatchQueue = DispatchQueue(label: "com.wink.diagnostic-log")
     ) {
         self.fileURL = fileURL
         self.logPath = fileURL.path
