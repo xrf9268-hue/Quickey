@@ -26,7 +26,7 @@ func refreshIfNeededMergesRunningAppsAndSeedsRecentsWhenStoredRecentsAreMissing(
         saveRecents: { recents in
             recorder.savedRecents.append(recents)
         },
-        mainBundleIdentifier: { "com.example.Quickey" }
+        mainBundleIdentifier: { "com.example.Wink" }
     ))
 
     provider.refreshIfNeeded()

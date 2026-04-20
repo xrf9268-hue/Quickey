@@ -166,7 +166,7 @@ func LaunchAtLoginPresentation_notFoundMapsToDisabledErrorStateWithoutOpenSettin
 func LaunchAtLoginPresentation_notFoundOutsideApplicationsShowsInstallGuidance() {
     let preferences = makePreferences(
         status: .notFound,
-        bundleURL: URL(fileURLWithPath: "/Users/yvan/developer/Quickey/build/Wink.app")
+        bundleURL: URL(fileURLWithPath: "/tmp/Wink.app")
     )
 
     let presentation = preferences.launchAtLoginPresentation

@@ -3,7 +3,7 @@ import ApplicationServices
 
 @MainActor
 final class AppController {
-    static let firstLaunchCompletedDefaultsKey = "com.quickey.firstLaunchCompleted"
+    static let firstLaunchCompletedDefaultsKey = "com.wink.firstLaunchCompleted"
 
     private let shortcutStore = ShortcutStore()
     private let persistenceService = PersistenceService()
@@ -35,7 +35,7 @@ final class AppController {
 
     func start() {
         DiagnosticLog.rotateIfNeeded()
-        DiagnosticLog.log("Quickey starting, version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+        DiagnosticLog.log("Wink starting, version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
 
         // Set AX global messaging timeout to 1s (default is 6s).
         // Prevents AX calls from blocking threads for too long when apps are unresponsive.

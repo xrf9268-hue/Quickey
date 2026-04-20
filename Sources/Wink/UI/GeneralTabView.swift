@@ -77,7 +77,7 @@ struct GeneralTabView: View {
             CardView {
                 HStack {
                     Spacer()
-                    Text("Quickey")
+                    Text("Wink")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.0")")

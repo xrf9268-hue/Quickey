@@ -86,7 +86,7 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
             return nil
         }
 
-        return "System Settings > Input Monitoring can lag behind live access. If Hyper shortcuts work here, Quickey already has the permission it needs."
+        return "System Settings > Input Monitoring can lag behind live access. If Hyper shortcuts work here, Wink already has the permission it needs."
     }
 
     var standardRegistrationWarning: String? {

@@ -16,8 +16,8 @@ func bannerDetailMentionsSystemSettingsLagWhenHyperCaptureIsActive() {
     #expect(status.bannerDetail == "Standard and Hyper shortcuts are active.")
     #expect(
         status.systemSettingsGuidance
-            == "System Settings > Input Monitoring can lag behind live access. If Hyper shortcuts work here, Quickey already has the permission it needs."
-    )
+            == "System Settings > Input Monitoring can lag behind live access. If Hyper shortcuts work here, Wink already has the permission it needs."
+        )
 }
 
 @Test

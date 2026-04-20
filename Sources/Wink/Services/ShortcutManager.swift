@@ -205,9 +205,9 @@ final class ShortcutManager {
         center.requestAuthorization(options: [.alert]) { granted, _ in
             guard granted else { return }
             let content = UNMutableNotificationContent()
-            content.title = "Quickey: Permission Lost"
-            content.body = "\(permission) permission was revoked. Quickey needs this permission to work. Please re-enable it in System Settings > Privacy & Security > \(permission)."
-            let request = UNNotificationRequest(identifier: "quickey-permission-\(permission)", content: content, trigger: nil)
+            content.title = "Wink: Permission Lost"
+            content.body = "\(permission) permission was revoked. Wink needs this permission to work. Please re-enable it in System Settings > Privacy & Security > \(permission)."
+            let request = UNNotificationRequest(identifier: "wink-permission-\(permission)", content: content, trigger: nil)
             center.add(request)
         }
     }

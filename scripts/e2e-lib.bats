@@ -77,7 +77,7 @@ JSON
 @test "capture_requirement_satisfied accepts standard readiness without event tap" {
   local log_file="$BATS_TEST_TMPDIR/debug.log"
   cat >"$log_file" <<'LOG'
-2026-04-09T04:24:42Z Quickey starting, version 0.2.0
+2026-04-09T04:24:42Z Wink starting, version 0.2.0
 2026-04-09T04:24:42Z attemptStart: shortcuts=1 triggerIndex=1 carbon=true eventTap=false
 2026-04-09T04:24:45Z checkPermission: ax=true im=true carbon=true eventTap=false
 LOG
@@ -90,7 +90,7 @@ LOG
 @test "capture_requirement_satisfied requires both transports for mixed mode" {
   local log_file="$BATS_TEST_TMPDIR/debug.log"
   cat >"$log_file" <<'LOG'
-2026-04-09T04:24:42Z Quickey starting, version 0.2.0
+2026-04-09T04:24:42Z Wink starting, version 0.2.0
 2026-04-09T04:24:42Z attemptStart: shortcuts=2 triggerIndex=2 carbon=true eventTap=false
 2026-04-09T04:24:45Z checkPermission: ax=true im=true carbon=true eventTap=false
 LOG
@@ -103,7 +103,7 @@ LOG
 @test "capture_requirement_satisfied accepts generic startup marker for none mode" {
   local log_file="$BATS_TEST_TMPDIR/debug.log"
   cat >"$log_file" <<'LOG'
-2026-04-09T04:24:42Z FutureBrand starting, version 0.2.0
+2026-04-09T04:24:42Z Wink starting, version 0.2.0
 LOG
 
   run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; capture_requirement_satisfied none '$log_file'"
