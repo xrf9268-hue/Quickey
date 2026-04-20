@@ -1,5 +1,9 @@
 #!/usr/bin/env bats
 
+setup() {
+  unset LC_ALL
+}
+
 @test "detect_capture_requirement returns standard for standard-only shortcuts" {
   local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
   cat >"$shortcuts" <<'JSON'
@@ -266,4 +270,14 @@ JSON
   [ "$(printf '%s' "$output" | grep -c '"bundleIdentifier"')" -eq 2 ]
   [[ "$output" == *'"bundleIdentifier":"com.google.antigravity"'* ]]
   [[ "$output" == *'"bundleIdentifier":"com.google.Chrome"'* ]]
+}
+
+@test "e2e defaults target Wink identity" {
+  run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; printf '%s\n%s\n%s\n%s\n' \"\$APP_PATH\" \"\$LOG_FILE\" \"\$APP_BUNDLE_ID\" \"\$SHORTCUTS_FILE\""
+
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == *"/build/Wink.app" ]]
+  [[ "${lines[1]}" == *"/.config/Wink/debug.log" ]]
+  [ "${lines[2]}" = "com.wink.app" ]
+  [[ "${lines[3]}" == *"/Library/Application Support/Wink/shortcuts.json" ]]
 }
