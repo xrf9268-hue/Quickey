@@ -707,13 +707,15 @@ e2e_launch_app() {
         echo -e "    ${GREEN}Capture ready${NC} (${requirement})"
     else
         echo -e "    ${RED}Capture failed to become ready within 30s${NC} (${requirement})"
-        if grep -q "tapCreate.*failed" "$LOG_FILE" 2>/dev/null; then
-            echo "    Check permissions:"
-            echo "    System Settings > Privacy & Security > Accessibility -> add Wink"
-            echo "    System Settings > Privacy & Security > Input Monitoring -> add Wink"
-        else
-            tail -20 "$LOG_FILE" 2>/dev/null || true
+        echo "    If this is a freshly rebuilt ad-hoc package, TCC may still point at an older Wink build."
+        echo "    Re-add the exact current app bundle in the relevant panes, then relaunch with:"
+        echo "      open \"$APP_PATH\""
+        echo "    Accessibility -> remove stale Wink row, then add: $APP_PATH"
+        if [ "$requirement" = "hyper" ] || [ "$requirement" = "mixed" ]; then
+            echo "    Input Monitoring -> remove stale Wink row, then add: $APP_PATH"
         fi
+        echo "    Recent log tail:"
+        tail -20 "$LOG_FILE" 2>/dev/null || true
         exit 1
     fi
 }

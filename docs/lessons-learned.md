@@ -73,6 +73,17 @@ tccutil reset ListenEvent com.wink.app
 
 For long-lived releases, use a stable Developer ID signature.
 
+## A Visible `Wink` TCC Row Can Still Be Stale
+
+**Issue**
+System Settings still shows a `Wink` row, but a freshly rebuilt packaged app launches with readiness logs such as `ax=false im=false carbon=false eventTap=false`.
+
+**Cause**
+The visible row can still point at an older bundle path or a previous ad-hoc signature identity. After rebuilding `build/Wink.app`, macOS may keep showing a `Wink` entry even though that record no longer matches the exact current app bundle.
+
+**Practical guidance**
+If a newly packaged build still looks untrusted, do not treat the visible `Wink` row as proof that TCC matches the current app. Remove the existing `Wink` row, add the exact current `build/Wink.app` again in the relevant panes, and relaunch the bundle via `open`. For standard-only fixtures that means Accessibility; for Hyper validation, re-add Input Monitoring too.
+
 ## Launch Via `open`
 
 **Issue**
