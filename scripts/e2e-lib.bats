@@ -104,6 +104,17 @@ LOG
   [ "$status" -eq 1 ]
 }
 
+@test "capture_requirement_satisfied accepts current startup log for none mode" {
+  local log_file="$BATS_TEST_TMPDIR/debug.log"
+  cat >"$log_file" <<'LOG'
+2026-04-09T04:24:42Z Quickey starting, version 0.2.0
+LOG
+
+  run bash -lc "source '$BATS_TEST_DIRNAME/e2e-lib.sh'; capture_requirement_satisfied none '$log_file'"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "bundle_has_configured_shortcut matches a configured standard shortcut" {
   local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
   cat >"$shortcuts" <<'JSON'

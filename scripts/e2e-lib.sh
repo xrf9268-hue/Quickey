@@ -322,7 +322,7 @@ capture_requirement_satisfied() {
             _standard_capture_ready "$log_file" && _hyper_capture_ready "$log_file"
             ;;
         none)
-            grep -q "Wink starting" "$log_file" 2>/dev/null
+            grep -q "Quickey starting" "$log_file" 2>/dev/null
             ;;
         *)
             return 1
