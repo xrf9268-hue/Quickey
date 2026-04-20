@@ -77,7 +77,7 @@ final class ShortcutEditorState {
 
     func moveShortcut(from source: IndexSet, to destination: Int) {
         var updated = shortcuts
-        updated.move(fromOffsets: source, toOffset: destination)
+        updated.moveItems(from: source, to: destination)
         shortcuts = updated
         shortcutManager.save(shortcuts: updated)
         onShortcutConfigurationChange()
@@ -135,5 +135,19 @@ final class ShortcutEditorState {
         selectedBundleIdentifier = ""
         recordedShortcut = nil
         isRecordingShortcut = false
+    }
+}
+
+private extension Array {
+    mutating func moveItems(from source: IndexSet, to destination: Int) {
+        guard !source.isEmpty else { return }
+
+        let movedItems = source.map { self[$0] }
+        for index in source.reversed() {
+            remove(at: index)
+        }
+
+        let adjustedDestination = destination - source.filter { $0 < destination }.count
+        insert(contentsOf: movedItems, at: adjustedDestination)
     }
 }
