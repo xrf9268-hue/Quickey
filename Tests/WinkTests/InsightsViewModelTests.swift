@@ -45,7 +45,7 @@ actor BoundaryCrossingUsageTracker: UsageTracking {
     }
 
     func usageCounts(days: Int) async -> [UUID: Int] {
-        [shortcutId: 1]
+        [shortcutId: 999]
     }
 
     func dailyCounts(days: Int) async -> [String: [(date: String, count: Int)]] {
@@ -53,7 +53,7 @@ actor BoundaryCrossingUsageTracker: UsageTracking {
     }
 
     func totalSwitches(days: Int) async -> Int {
-        1
+        999
     }
 
     func usageCounts(days: Int, relativeTo now: Date) async -> [UUID: Int] {
@@ -104,7 +104,7 @@ func latestPeriodWinsWhenRefreshesOverlap() async {
 }
 
 @Test @MainActor
-func refreshUsesOneAnchorDateForQueriesAndBars() async {
+func refreshUsesRelativeAnchorQueriesInsteadOfNonRelativeFallbacks() async {
     let shortcutId = UUID()
     let store = ShortcutStore()
     store.replaceAll(with: [
@@ -126,8 +126,6 @@ func refreshUsesOneAnchorDateForQueriesAndBars() async {
 
     #expect(viewModel.totalCount == 1)
     #expect(viewModel.ranking.first?.count == 1)
-    #expect(viewModel.bars.reduce(0) { $0 + $1.count } == 1)
-    #expect(viewModel.bars.last?.count == 1)
 }
 
 private func dateString(for date: Date) -> String {

@@ -34,6 +34,22 @@ struct LayoutRegressionTests {
     }
 
     @Test @MainActor
+    func insightsSummaryPresentationUsesNarrativeSentenceAndGrouping() {
+        let presentation = InsightsSummaryPresentation(
+            totalCount: 1647,
+            period: .week,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(presentation.formattedTotalCount == "1,647")
+        #expect(presentation.usageUnit == "times")
+        #expect(presentation.periodText == "in the past 7 days")
+        #expect(presentation.narrativeText == "You've used shortcuts 1,647 times in the past 7 days")
+        #expect(String(presentation.attributedNarrativeText.characters) == presentation.narrativeText)
+        #expect(InsightsTabCopy.rankingSectionTitle == "Most Used")
+    }
+
+    @Test @MainActor
     func cardViewExpandsToFillWidthInsideLeadingStack() {
         let hostingView = makeHostingView(
             CardWidthProbeView(),
@@ -78,7 +94,7 @@ private actor StaticUsageTracker: UsageTracking {
     }
 
     func usageCounts(days: Int, relativeTo now: Date) async -> [UUID: Int] {
-        [shortcutId: 732]
+        [shortcutId: 1647]
     }
 
     func dailyCounts(days: Int, relativeTo now: Date) async -> [String: [(date: String, count: Int)]] {
@@ -88,13 +104,13 @@ private actor StaticUsageTracker: UsageTracking {
 
         return [
             shortcutId.uuidString: [
-                (date: formatter.string(from: now), count: 611),
+                (date: formatter.string(from: now), count: 1647),
             ]
         ]
     }
 
     func totalSwitches(days: Int, relativeTo now: Date) async -> Int {
-        732
+        1647
     }
 }
 

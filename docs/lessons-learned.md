@@ -1,5 +1,27 @@
 # Wink Troubleshooting Guidance
 
+## Visual UI Validation Needs The Real Packaged Window
+
+**Issue**
+Settings/UI polish work can look "done" in code review or synthetic rendering, but still miss the real visual mismatch the issue was asking to fix.
+
+**Cause**
+SwiftUI structure and regression tests are necessary, but they do not replace the final perception check. Off-screen rendering also skips the real packaged-app window chrome, current appearance, and live spacing/alignment context. On top of that, local macOS debugging can easily leave multiple `Wink` instances running at once, so a screenshot can accidentally come from an older binary.
+
+**Practical guidance**
+For presentation-sensitive work, validate the packaged app itself and capture the real `Wink` window before closing the task. Before trusting a screenshot, make sure only the intended `build/Wink.app` instance is running; otherwise you may end up comparing the issue reference against stale UI from an older process. Treat synthetic rendering as a helper, not the sign-off artifact.
+
+## Remove Dead Presentation Data When The UI No Longer Needs It
+
+**Issue**
+A UI cleanup can still leave hidden maintenance cost behind if the removed surface's data pipeline keeps running in the view model.
+
+**Cause**
+It is easy to delete the visible chart/card/rank chrome first and forget that the view model is still fetching, aggregating, and testing data that nothing renders anymore.
+
+**Practical guidance**
+Whenever a presentation layer is removed, immediately search for the matching view-model state, background queries, helper types, and regression assertions. If nothing else uses that path, delete it in the same change instead of carrying it forward "just in case." This keeps the feature boundary honest and avoids paying ongoing complexity for dead UI.
+
 ## Hyper State Must Be Replayed After Event-Tap Startup
 
 **Issue**
