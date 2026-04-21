@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import SwiftUI
 
 private enum ShortcutRowMetrics {
@@ -7,16 +9,48 @@ private enum ShortcutRowMetrics {
     static let verticalPadding: CGFloat = 10
 }
 
+struct ShortcutRowAccessibilityOptions: Equatable {
+    let differentiateWithoutColor: Bool
+    let reduceMotion: Bool
+
+    static let standard = ShortcutRowAccessibilityOptions(
+        differentiateWithoutColor: false,
+        reduceMotion: false
+    )
+
+    @MainActor
+    static var current: ShortcutRowAccessibilityOptions {
+        let workspace = NSWorkspace.shared
+        return ShortcutRowAccessibilityOptions(
+            differentiateWithoutColor: workspace.accessibilityDisplayShouldDifferentiateWithoutColor,
+            reduceMotion: workspace.accessibilityDisplayShouldReduceMotion
+        )
+    }
+}
+
 struct ShortcutsListRowPresentation {
     let title: String
     let subtitle: String
+    let contentOpacity: Double
     let showsRunningIndicator: Bool
+    let runningStatusText: String?
+    let unavailableStatusText: String?
     let unavailableHelpText: String?
 
-    init(shortcut: AppShortcut, usageCount: Int, runtimeStatus: ShortcutRuntimeStatus) {
+    init(
+        shortcut: AppShortcut,
+        usageCount: Int,
+        runtimeStatus: ShortcutRuntimeStatus,
+        accessibilityOptions: ShortcutRowAccessibilityOptions = .standard
+    ) {
         title = shortcut.appName
         subtitle = "\(usageCount)× past 7 days"
+        contentOpacity = shortcut.isEnabled ? 1.0 : 0.65
         showsRunningIndicator = runtimeStatus.isRunning
+        runningStatusText = runtimeStatus.isRunning && accessibilityOptions.differentiateWithoutColor
+            ? "Running"
+            : nil
+        unavailableStatusText = runtimeStatus.isUnavailable ? "App unavailable" : nil
         unavailableHelpText = runtimeStatus.isUnavailable
             ? "Couldn't find this app. Rebind it to restore the shortcut."
             : nil
@@ -30,6 +64,7 @@ struct ShortcutsTabView: View {
     var shortcutStatusProvider: ShortcutStatusProvider
 
     @State private var showingAppPicker = false
+    @State private var accessibilityOptions = ShortcutRowAccessibilityOptions.standard
 
     var body: some View {
         let importPreviewActive = editor.pendingRecipeImport != nil
@@ -174,10 +209,18 @@ struct ShortcutsTabView: View {
             }
         }
         .onAppear {
+            accessibilityOptions = .current
             shortcutStatusProvider.track(editor.shortcuts)
         }
         .onChange(of: editor.shortcuts) { _, newShortcuts in
             shortcutStatusProvider.track(newShortcuts)
+        }
+        .onReceive(
+            NSWorkspace.shared.notificationCenter.publisher(
+                for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+            )
+        ) { _ in
+            accessibilityOptions = .current
         }
     }
 
@@ -190,6 +233,7 @@ struct ShortcutsTabView: View {
             shortcut: shortcut,
             usageCount: editor.usageCounts[shortcut.id, default: 0],
             runtimeStatus: runtimeStatus,
+            accessibilityOptions: accessibilityOptions,
             importPreviewActive: importPreviewActive,
             index: index,
             onToggleEnabled: {
@@ -285,6 +329,7 @@ struct ShortcutsListRow: View {
     let shortcut: AppShortcut
     let usageCount: Int
     let runtimeStatus: ShortcutRuntimeStatus
+    let accessibilityOptions: ShortcutRowAccessibilityOptions
     let importPreviewActive: Bool
     let index: Int
     let onToggleEnabled: @MainActor () -> Void
@@ -294,21 +339,24 @@ struct ShortcutsListRow: View {
         ShortcutsListRowPresentation(
             shortcut: shortcut,
             usageCount: usageCount,
-            runtimeStatus: runtimeStatus
+            runtimeStatus: runtimeStatus,
+            accessibilityOptions: accessibilityOptions
         )
     }
 
-    private var rowOpacity: Double {
-        switch (shortcut.isEnabled, runtimeStatus.isUnavailable) {
-        case (false, true):
-            0.4
-        case (false, false):
-            0.5
-        case (true, true):
-            0.65
-        case (true, false):
-            1.0
-        }
+    private var statusAnimationKey: ShortcutRowStatusAnimationKey {
+        ShortcutRowStatusAnimationKey(
+            isEnabled: shortcut.isEnabled,
+            isRunning: runtimeStatus.isRunning,
+            isUnavailable: runtimeStatus.isUnavailable,
+            differentiateWithoutColor: accessibilityOptions.differentiateWithoutColor
+        )
+    }
+
+    private var statusAnimation: Animation? {
+        accessibilityOptions.reduceMotion
+            ? nil
+            : .easeOut(duration: 0.16)
     }
 
     var body: some View {
@@ -322,7 +370,7 @@ struct ShortcutsListRow: View {
                 if let unavailableHelpText = presentation.unavailableHelpText {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color(nsColor: .systemOrange))
                         .background(
                             Circle()
                                 .fill(Color(nsColor: .windowBackgroundColor))
@@ -339,16 +387,31 @@ struct ShortcutsListRow: View {
                         .font(.system(size: 13, weight: .medium))
 
                     if presentation.showsRunningIndicator {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 8, height: 8)
-                            .help("App is currently running")
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color(nsColor: .systemGreen))
+                                .frame(width: 8, height: 8)
+
+                            if let runningStatusText = presentation.runningStatusText {
+                                Text(runningStatusText)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .help("App is currently running")
                     }
                 }
 
                 Text(presentation.subtitle)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+
+                if let unavailableStatusText = presentation.unavailableStatusText {
+                    Label(unavailableStatusText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(nsColor: .systemOrange))
+                        .help(presentation.unavailableHelpText ?? unavailableStatusText)
+                }
             }
 
             Spacer()
@@ -375,6 +438,14 @@ struct ShortcutsListRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, ShortcutRowMetrics.verticalPadding)
         .alternatingRowBackground(index: index)
-        .opacity(rowOpacity)
+        .opacity(presentation.contentOpacity)
+        .animation(statusAnimation, value: statusAnimationKey)
     }
+}
+
+private struct ShortcutRowStatusAnimationKey: Equatable {
+    let isEnabled: Bool
+    let isRunning: Bool
+    let isUnavailable: Bool
+    let differentiateWithoutColor: Bool
 }
