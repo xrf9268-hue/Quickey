@@ -48,20 +48,11 @@ final class AppListProvider {
     }
 
     func refreshIfNeeded() {
-        if let lastScan = lastScanTime, client.now().timeIntervalSince(lastScan) < 60 {
-            return
-        }
-        guard !isScanning else { return }
-        isScanning = true
-        refreshTask = Task { [client] in
-            let scanned = await client.scanInstalledApps()
-            let runningApplications = client.runningApplications()
-            applyRefresh(
-                scanned: scanned,
-                runningApplications: runningApplications,
-                now: client.now()
-            )
-        }
+        refresh(force: false)
+    }
+
+    func forceRefresh() {
+        refresh(force: true)
     }
 
     func noteRecentApp(bundleIdentifier: String) {
@@ -79,6 +70,11 @@ final class AppListProvider {
 
     func refreshAndWaitIfNeeded() async {
         refreshIfNeeded()
+        await waitForRefreshForTesting()
+    }
+
+    func forceRefreshAndWait() async {
+        forceRefresh()
         await waitForRefreshForTesting()
     }
 
@@ -113,6 +109,25 @@ final class AppListProvider {
     }
 
     // MARK: - Scanning
+
+    private func refresh(force: Bool) {
+        if !force,
+           let lastScan = lastScanTime,
+           client.now().timeIntervalSince(lastScan) < 60 {
+            return
+        }
+        guard !isScanning else { return }
+        isScanning = true
+        refreshTask = Task { [client] in
+            let scanned = await client.scanInstalledApps()
+            let runningApplications = client.runningApplications()
+            applyRefresh(
+                scanned: scanned,
+                runningApplications: runningApplications,
+                now: client.now()
+            )
+        }
+    }
 
     nonisolated private static func scanInstalledApps() -> [AppEntry] {
         let searchDirs = [

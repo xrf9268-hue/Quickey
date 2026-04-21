@@ -229,7 +229,7 @@ final class ShortcutEditorState {
 
     func importRecipes(using appListProvider: AppListProvider) async {
         do {
-            await appListProvider.refreshAndWaitIfNeeded()
+            await appListProvider.forceRefreshAndWait()
             guard let data = try recipeTransferClient.importData() else {
                 return
             }

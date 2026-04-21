@@ -293,6 +293,62 @@ func beginImportUsesBundleLocatorWhenScanCatalogMissesInstalledApp() throws {
 }
 
 @Test @MainActor
+func importRecipesForcesFreshAppScanBeforePlanning() async throws {
+    let recorder = ImportScanRecorder(now: Date(timeIntervalSinceReferenceDate: 500))
+    let recipeData = try WinkRecipeCodec().encode(
+        WinkRecipe(shortcuts: [
+            WinkRecipeShortcut(
+                appName: "Safari",
+                bundleIdentifier: "com.example.missing",
+                keyEquivalent: "s",
+                modifierFlags: ["command"],
+                isEnabled: true
+            )
+        ])
+    )
+    let transferClient = ShortcutEditorState.RecipeTransferClient(
+        importData: { recipeData },
+        exportData: { _, _ in nil }
+    )
+    let context = makeEditorContext(
+        recipeTransferClient: transferClient,
+        appBundleLocator: TestAppBundleLocator(entries: [:]).locator
+    )
+    defer { context.harness.cleanup() }
+
+    let appListProvider = AppListProvider(client: .init(
+        now: { recorder.now },
+        scanInstalledApps: {
+            recorder.scanCallCount += 1
+            if recorder.scanCallCount == 1 {
+                return []
+            }
+            return [
+                AppEntry(
+                    id: "com.apple.Safari",
+                    name: "Safari",
+                    url: URL(fileURLWithPath: "/Applications/Safari.app")
+                )
+            ]
+        },
+        runningApplications: { [] },
+        loadRecents: { [] },
+        saveRecents: { _ in },
+        mainBundleIdentifier: { nil }
+    ))
+
+    appListProvider.refreshIfNeeded()
+    await appListProvider.waitForRefreshForTesting()
+    recorder.now = recorder.now.addingTimeInterval(10)
+
+    await context.editor.importRecipes(using: appListProvider)
+
+    #expect(recorder.scanCallCount == 2)
+    let resolution = try #require(context.editor.pendingRecipeImport?.entries.first?.imported.resolution)
+    #expect(resolution == .matchedByAppName)
+}
+
+@Test @MainActor
 func exportRecipeDataUsesShareableSchema() throws {
     let context = makeEditorContext(existingShortcuts: [
         AppShortcut(
@@ -402,9 +458,22 @@ private final class CallbackCounter: @unchecked Sendable {
     var value = 0
 }
 
+private final class ImportScanRecorder: @unchecked Sendable {
+    var now: Date
+    var scanCallCount = 0
+
+    init(now: Date) {
+        self.now = now
+    }
+}
+
 @MainActor
 private func makeEditorContext(
     existingShortcuts: [AppShortcut] = [],
+    recipeTransferClient: ShortcutEditorState.RecipeTransferClient = .init(
+        importData: { nil },
+        exportData: { _, _ in nil }
+    ),
     appBundleLocator: AppBundleLocator = TestAppBundleLocator(entries: [:]).locator
 ) -> (
     editor: ShortcutEditorState,
@@ -437,6 +506,7 @@ private func makeEditorContext(
     let editor = ShortcutEditorState(
         shortcutStore: shortcutStore,
         shortcutManager: manager,
+        recipeTransferClient: recipeTransferClient,
         appBundleLocator: appBundleLocator,
         onShortcutConfigurationChange: {
             callbackCount.value += 1

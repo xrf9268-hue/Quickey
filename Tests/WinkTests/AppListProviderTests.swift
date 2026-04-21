@@ -73,6 +73,30 @@ func refreshIfNeededSkipsRescanUntilSixtySecondsHaveElapsed() async {
 }
 
 @Test @MainActor
+func forceRefreshAndWaitRescansWithinCacheWindow() async {
+    let recorder = AppListProviderRecorder(now: Date(timeIntervalSinceReferenceDate: 250))
+    let provider = AppListProvider(client: .init(
+        now: { recorder.now },
+        scanInstalledApps: {
+            recorder.scanCallCount += 1
+            return []
+        },
+        runningApplications: { [] },
+        loadRecents: { [] },
+        saveRecents: { _ in },
+        mainBundleIdentifier: { nil }
+    ))
+
+    provider.refreshIfNeeded()
+    await provider.waitForRefreshForTesting()
+
+    recorder.now = recorder.now.addingTimeInterval(10)
+    await provider.forceRefreshAndWait()
+
+    #expect(recorder.scanCallCount == 2)
+}
+
+@Test @MainActor
 func noteRecentAppCapsPersistedRecentsAtTenEntries() {
     let recorder = AppListProviderRecorder(now: Date())
     let provider = AppListProvider(client: .init(
