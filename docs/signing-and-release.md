@@ -7,7 +7,7 @@ Wink's public release path now ships two distribution tracks from the same signe
 1. `Wink-<version>.dmg` for first-time install
 2. `Wink-<version>.zip` plus `appcast.xml` for Sparkle auto updates
 
-The release workflow signs and notarizes `build/Wink.app`, staples it, packages both archives, uploads the versioned `Wink-<version>.dmg` and `Wink-<version>.zip` artifacts to Cloudflare R2, publishes the DMG on GitHub Releases, and only then uploads the live `appcast.xml` so Sparkle clients do not see a new update before the rest of the release succeeds.
+The release workflow signs `build/Wink.app`, wraps it in a notarization zip for `notarytool`, staples the notarized app bundle, packages both archives, uploads the versioned `Wink-<version>.dmg` and `Wink-<version>.zip` artifacts to Cloudflare R2, publishes the DMG on GitHub Releases, and only then uploads the live `appcast.xml` so Sparkle clients do not see a new update before the rest of the release succeeds.
 
 Ordinary CI verifies the package structure, smoke-tests the Sparkle ZIP/appcast generation path with temporary signing keys, and dry-runs the R2 upload helper. The dedicated `Release` workflow still requires real Apple signing credentials, Sparkle signing keys, and R2 credentials.
 
@@ -152,7 +152,7 @@ If any required Apple, Sparkle, or R2 secret is missing, the workflow exits succ
 2. Write the `notarytool` API key to a temporary file
 3. Run `swift test`
 4. Run `scripts/package-app.sh` in hardened runtime signing mode, injecting `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY`
-5. Verify, notarize, and staple `build/Wink.app`
+5. Verify `build/Wink.app`, archive it as a zip for `notarytool`, notarize that archive, and staple `build/Wink.app`
 6. Run `scripts/package-update-zip.sh`
 7. Run `scripts/generate-appcast.sh` with the private EdDSA key
 8. Run `scripts/package-dmg.sh`, then notarize and staple `build/Wink-<version>.dmg`

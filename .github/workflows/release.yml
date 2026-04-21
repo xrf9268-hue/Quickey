@@ -188,6 +188,7 @@ jobs:
           echo "DMG_PATH=build/Wink-${VERSION}.dmg" >> "$GITHUB_ENV"
           echo "ZIP_PATH=build/Wink-${VERSION}.zip" >> "$GITHUB_ENV"
           echo "APPCAST_PATH=build/appcast.xml" >> "$GITHUB_ENV"
+          echo "APP_NOTARIZATION_ZIP_PATH=$RUNNER_TEMP/Wink-${VERSION}-notarization.zip" >> "$GITHUB_ENV"
           echo "R2_PUBLIC_BASE_URL=$R2_PUBLIC_BASE_URL" >> "$GITHUB_ENV"
           echo "SPARKLE_FEED_URL=${R2_PUBLIC_BASE_URL}appcast.xml" >> "$GITHUB_ENV"
 
@@ -241,12 +242,17 @@ jobs:
           spctl --assess --type exec --verbose build/Wink.app
           test -d build/Wink.app/Contents/Frameworks/Sparkle.framework
 
-      - name: Submit app bundle for notarization
+      - name: Archive app bundle for notarization
+        run: |
+          rm -f "$APP_NOTARIZATION_ZIP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent build/Wink.app "$APP_NOTARIZATION_ZIP_PATH"
+
+      - name: Submit app notarization archive
         env:
           NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
           NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
         run: |
-          xcrun notarytool submit build/Wink.app \
+          xcrun notarytool submit "$APP_NOTARIZATION_ZIP_PATH" \
             --key "$NOTARY_KEY_PATH" \
             --key-id "$NOTARYTOOL_KEY_ID" \
             --issuer "$NOTARYTOOL_ISSUER" \
