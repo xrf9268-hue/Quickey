@@ -108,6 +108,26 @@ Runtime-sensitive changes = event taps, app activation, permissions/TCC, Accessi
 - Release-candidate signoff requires all pending items validated
 - Never rewrite history to imply pending validation was completed
 
+## PR follow-up discipline
+
+- After opening or updating a PR, proactively inspect live GitHub checks, review decisions, and unresolved actionable review threads without waiting for the user to remind you.
+- If the user mentions PR problems, review comments, or CI failures, inspect the live PR state first and separate review-thread blockers from CI/build failures before editing.
+- Treat actionable review feedback as implementation work on the same branch by default; do not stop at summarizing the comments unless the user explicitly asks for summary only.
+- After pushing review fixes, re-check the live PR state so follow-up work is not left waiting on another manual reminder.
+
+## PR ownership after publish
+
+- Once you create, update, or are asked to watch a PR, you own the PR follow-up loop until checks are green, actionable review threads are addressed, or you report a concrete blocker.
+- Do not treat "提 PR" or "push the branch" as the end of the task. The default expectation is: publish, inspect live PR state, fix follow-up issues on the same branch, and re-check.
+- After every push to a PR branch, immediately re-run the live GitHub triage loop:
+  - inspect `gh pr view` for review decision and latest review activity
+  - inspect `gh pr checks` for failing or pending checks
+  - inspect unresolved review threads with thread-aware GitHub queries, not only top-level PR summaries
+- If review feedback and CI failures both exist, handle both proactively unless one clearly blocks the other; do not wait for the user to point out the second class of problem.
+- If a review thread is already fixed in code, follow through by replying and/or resolving it when the user wants that write action, then verify the review gate/check state again.
+- If GitHub automation does not rerun automatically after resolving a thread, rerun or retrigger the relevant check instead of leaving the PR in a stale failed state.
+- Only stop the follow-up loop when the PR is clean, when remaining items are explicitly non-actionable, or when you have told the user exactly what external action is still required.
+
 ## Investigation before implementation
 
 - Do not change code before you understand the failure mode or behavior gap.
