@@ -110,6 +110,50 @@ func startupSequenceStartsUpdateServiceBeforeShortcutManager() {
 }
 
 @Test @MainActor
+func startupSequenceAppliesPersistedPreferencesBeforeStartingShortcutManager() {
+    var events: [String] = []
+
+    AppController.runStartupSequence(
+        startUpdateService: {
+            events.append("startUpdateService")
+        },
+        loadShortcuts: {
+            events.append("load")
+            return []
+        },
+        replaceShortcuts: { _ in
+            events.append("replace")
+        },
+        reapplyHyperIfNeeded: {
+            events.append("reapplyHyper")
+        },
+        isHyperEnabled: {
+            events.append("readHyperEnabled")
+            return false
+        },
+        setHyperKeyEnabled: { enabled in
+            events.append("setHyper:\(enabled)")
+        },
+        preparePreferences: {
+            events.append("preparePreferences")
+        },
+        startShortcutManager: {
+            events.append("startShortcutManager")
+        },
+        installMenuBar: {
+            events.append("installMenuBar")
+        }
+    )
+
+    let preparePreferencesIndex = events.firstIndex(of: "preparePreferences")
+    let startShortcutIndex = events.firstIndex(of: "startShortcutManager")
+
+    #expect(preparePreferencesIndex != nil)
+    #expect(startShortcutIndex != nil)
+    #expect(preparePreferencesIndex! < startShortcutIndex!)
+}
+
+@Test @MainActor
 func openPrimarySettingsWindowUsesInstalledSettingsLauncherHandler() throws {
     ensureAppKitApplication()
 

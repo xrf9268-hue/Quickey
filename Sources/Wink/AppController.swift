@@ -93,6 +93,7 @@ final class AppController {
             reapplyHyperIfNeeded: { hyperKeyService.reapplyIfNeeded() },
             isHyperEnabled: { hyperKeyService.isEnabled },
             setHyperKeyEnabled: { shortcutManager.setHyperKeyEnabled($0) },
+            preparePreferences: { _ = appPreferences },
             startShortcutManager: { shortcutManager.start() },
             installMenuBar: { menuBarController.install() }
         )
@@ -126,6 +127,7 @@ final class AppController {
         reapplyHyperIfNeeded: @MainActor () -> Void,
         isHyperEnabled: @MainActor () -> Bool,
         setHyperKeyEnabled: @MainActor (Bool) -> Void,
+        preparePreferences: @MainActor () -> Void = {},
         startShortcutManager: @MainActor () -> Void,
         installMenuBar: @MainActor () -> Void
     ) {
@@ -139,6 +141,7 @@ final class AppController {
         }
         reapplyHyperIfNeeded()
         setHyperKeyEnabled(isHyperEnabled())
+        preparePreferences()
         startShortcutManager()
         installMenuBar()
     }

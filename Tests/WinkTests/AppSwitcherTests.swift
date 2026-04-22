@@ -1273,6 +1273,66 @@ func frontmostHidePreferenceHidesEvenWithoutStableWindowEvidence() {
 }
 
 @Test @MainActor
+func frontmostHidePreferenceDoesNotOverrideObservedNonFrontmostState() {
+    guard let frontmostApp = NSWorkspace.shared.frontmostApplication,
+          let bundleIdentifier = frontmostApp.bundleIdentifier else {
+        Issue.record("Expected a frontmost application with a bundle identifier for observed-state test")
+        return
+    }
+
+    var psn = ProcessSerialNumber()
+    psn.highLongOfPSN = 3
+    psn.lowLongOfPSN = 4
+    var activationCalls = 0
+    var hideCalls = 0
+    let switcher = AppSwitcher(
+        frontmostTracker: makeTrackerForAppSwitcherTests(),
+        applicationObservation: ApplicationObservation(client: .init(
+            currentFrontmostBundleIdentifier: { "com.apple.Terminal" },
+            windowObservation: { _ in
+                .init(
+                    windows: nil,
+                    visibleWindowCount: 1,
+                    hasFocusedWindow: true,
+                    hasMainWindow: true,
+                    windowsReadSucceeded: true,
+                    failureReason: nil
+                )
+            },
+            activationPolicy: { _ in .regular }
+        )),
+        activationClient: .init(activateFrontProcess: { _, _ in
+            activationCalls += 1
+            return .success(psn)
+        }),
+        hideRequestClient: .init(hideApplication: { _ in
+            hideCalls += 1
+            return true
+        }),
+        appLookupClient: .init(
+            runningApplications: { _ in [frontmostApp] },
+            applicationURL: { _ in nil }
+        )
+    )
+    switcher.setFrontmostTargetBehavior(.hide)
+
+    let shortcut = AppShortcut(
+        appName: frontmostApp.localizedName ?? "Frontmost",
+        bundleIdentifier: bundleIdentifier,
+        keyEquivalent: "g",
+        modifierFlags: ["command", "control"]
+    )
+
+    let accepted = switcher.toggleApplication(for: shortcut)
+
+    #expect(accepted == true)
+    #expect(hideCalls == 0)
+    #expect(activationCalls == 1)
+    #expect(switcher.pendingDeactivationState == nil)
+    #expect(switcher.pendingActivationState?.bundleIdentifier == bundleIdentifier)
+}
+
+@Test @MainActor
 func frontmostFocusPreferenceKeepsSessionOutOfDeactivation() {
     guard let frontmostApp = NSWorkspace.shared.frontmostApplication,
           let bundleIdentifier = frontmostApp.bundleIdentifier else {

@@ -699,10 +699,9 @@ final class AppSwitcher: AppSwitching {
     }
 
     private func isTargetCurrentlyFrontmost(
-        runningApp: NSRunningApplication,
         snapshot: ActivationObservationSnapshot
     ) -> Bool {
-        snapshot.targetIsObservedFrontmost || runningApp.isActive
+        snapshot.targetIsObservedFrontmost
     }
 
     private func clearActivationTracking(for bundleIdentifier: String, resetPreviousTracking: Bool) {
@@ -903,7 +902,7 @@ final class AppSwitcher: AppSwitching {
             )
         }
 
-        if isTargetCurrentlyFrontmost(runningApp: runningApp, snapshot: preActionSnapshot) {
+        if isTargetCurrentlyFrontmost(snapshot: preActionSnapshot) {
             switch frontmostTargetBehavior {
             case .focus:
                 return performFrontmostFocus(

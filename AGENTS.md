@@ -108,6 +108,13 @@ Runtime-sensitive changes = event taps, app activation, permissions/TCC, Accessi
 - Release-candidate signoff requires all pending items validated
 - Never rewrite history to imply pending validation was completed
 
+## PR follow-up discipline
+
+- After opening or updating a PR, proactively inspect live GitHub checks, review decisions, and unresolved actionable review threads without waiting for the user to remind you.
+- If the user mentions PR problems, review comments, or CI failures, inspect the live PR state first and separate review-thread blockers from CI/build failures before editing.
+- Treat actionable review feedback as implementation work on the same branch by default; do not stop at summarizing the comments unless the user explicitly asks for summary only.
+- After pushing review fixes, re-check the live PR state so follow-up work is not left waiting on another manual reminder.
+
 ## Investigation before implementation
 
 - Do not change code before you understand the failure mode or behavior gap.
