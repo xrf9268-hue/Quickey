@@ -127,6 +127,9 @@ final class ShortcutManager {
         }
 
         shortcutsPaused = paused
+        if !paused {
+            _ = refreshShortcutAvailabilityIfNeeded()
+        }
         captureCoordinator.setCapturePaused(paused)
 
         guard hasStarted else {
@@ -221,6 +224,7 @@ final class ShortcutManager {
         }
 
         if shortcutsPaused {
+            _ = refreshShortcutAvailabilityIfNeeded()
             captureCoordinator.refreshInputMonitoring(granted: imGranted)
             return
         }

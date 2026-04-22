@@ -67,7 +67,8 @@ struct ShortcutsListRowPresentation {
     }
 }
 
-private enum ShortcutBannerPresentation {
+enum ShortcutBannerPresentation: Equatable {
+    case info(title: String, message: String)
     case success(title: String, message: String)
     case warning(title: String, message: String, showsAction: Bool)
 
@@ -86,6 +87,14 @@ private enum ShortcutBannerPresentation {
                 title: "Input Monitoring needed",
                 message: "Hyper shortcuts need Input Monitoring before Wink can capture them.",
                 showsAction: true
+            )
+            return
+        }
+
+        if status.shortcutsPaused {
+            self = .info(
+                title: "Shortcuts paused",
+                message: status.bannerDetail
             )
             return
         }
@@ -305,6 +314,8 @@ struct ShortcutsTabView: View {
     @ViewBuilder
     private var permissionBanner: some View {
         switch ShortcutBannerPresentation(status: preferences.shortcutCaptureStatus) {
+        case let .info(title, message):
+            WinkBanner(kind: .info, title: title, message: message)
         case let .success(title, message):
             WinkBanner(kind: .success, title: title, message: message)
         case let .warning(title, message, showsAction):

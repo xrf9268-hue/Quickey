@@ -5,6 +5,11 @@ import SwiftUI
 @MainActor
 @Observable
 final class MenuBarPopoverModel {
+    private struct ObservationToken {
+        let center: NotificationCenter
+        let token: NSObjectProtocol
+    }
+
     struct ShortcutRow: Identifiable, Equatable {
         let id: UUID
         let shortcut: AppShortcut
@@ -34,7 +39,10 @@ final class MenuBarPopoverModel {
     private let usageTracker: any UsageTracking
     private let openSettingsAction: @MainActor (SettingsTab?) -> Void
     private let quitAction: @MainActor () -> Void
+    private let workspaceNotificationCenter: NotificationCenter
+    private let appNotificationCenter: NotificationCenter
     private var usageRefreshTask: Task<Void, Never>?
+    private nonisolated(unsafe) var observationTokens: [ObservationToken] = []
 
     var searchText = ""
     private(set) var shortcutRows: [ShortcutRow] = []
@@ -46,6 +54,8 @@ final class MenuBarPopoverModel {
         preferences: AppPreferences,
         shortcutStatusProvider: ShortcutStatusProvider,
         usageTracker: any UsageTracking,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        appNotificationCenter: NotificationCenter = .default,
         openSettings: @escaping @MainActor (SettingsTab?) -> Void,
         quit: @escaping @MainActor () -> Void
     ) {
@@ -53,9 +63,18 @@ final class MenuBarPopoverModel {
         self.preferences = preferences
         self.shortcutStatusProvider = shortcutStatusProvider
         self.usageTracker = usageTracker
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+        self.appNotificationCenter = appNotificationCenter
         self.openSettingsAction = openSettings
         self.quitAction = quit
+        observeNotifications()
         refresh()
+    }
+
+    deinit {
+        for observation in observationTokens {
+            observation.center.removeObserver(observation.token)
+        }
     }
 
     var versionText: String {
@@ -105,6 +124,39 @@ final class MenuBarPopoverModel {
         quitAction()
     }
 
+    private func observeNotifications() {
+        let workspaceNotifications: [Notification.Name] = [
+            NSWorkspace.didLaunchApplicationNotification,
+            NSWorkspace.didTerminateApplicationNotification
+        ]
+
+        for name in workspaceNotifications {
+            addObservation(for: name, center: workspaceNotificationCenter)
+        }
+
+        addObservation(
+            for: NSApplication.didBecomeActiveNotification,
+            center: appNotificationCenter
+        )
+    }
+
+    private func addObservation(
+        for name: Notification.Name,
+        center: NotificationCenter
+    ) {
+        let token = center.addObserver(
+            forName: name,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                self?.refresh()
+            }
+        }
+
+        observationTokens.append(ObservationToken(center: center, token: token))
+    }
+
     private func refreshUsage() {
         usageRefreshTask?.cancel()
         let usageTracker = self.usageTracker
@@ -143,9 +195,6 @@ struct MenuBarPopoverView: View {
         }
         .background(palette.windowBg)
         .onAppear {
-            model.refresh()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refresh()
         }
     }

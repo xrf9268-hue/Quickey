@@ -111,6 +111,85 @@ struct MenuBarPopoverViewTests {
         #expect(context.model.todayHistogramBars.count == 24)
         #expect(context.model.todayHistogramBars.allSatisfy { $0 == 1 })
     }
+
+    @Test @MainActor
+    func modelRefreshesRunningStateForWorkspaceNotificationsWhilePopoverIsOpen() {
+        let runtimeState = PopoverRuntimeState(
+            applicationURLs: [
+                "com.apple.Safari": URL(fileURLWithPath: "/Applications/Safari.app")
+            ],
+            runningBundleIdentifiers: []
+        )
+        let workspaceNotificationCenter = NotificationCenter()
+        let context = makePopoverContext(
+            shortcuts: [
+                AppShortcut(
+                    appName: "Safari",
+                    bundleIdentifier: "com.apple.Safari",
+                    keyEquivalent: "s",
+                    modifierFlags: ["command"]
+                )
+            ],
+            usageTotal: 0,
+            runtimeState: runtimeState,
+            workspaceNotificationCenter: workspaceNotificationCenter
+        )
+
+        #expect(context.model.shortcutRows.first?.isRunning == false)
+
+        runtimeState.runningBundleIdentifiers = ["com.apple.Safari"]
+        workspaceNotificationCenter.post(
+            name: NSWorkspace.didLaunchApplicationNotification,
+            object: nil
+        )
+        drainMainRunLoop()
+
+        #expect(context.model.shortcutRows.first?.isRunning == true)
+
+        runtimeState.runningBundleIdentifiers = []
+        workspaceNotificationCenter.post(
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+        drainMainRunLoop()
+
+        #expect(context.model.shortcutRows.first?.isRunning == false)
+    }
+
+    @Test @MainActor
+    func modelRefreshesUnavailableStateForActivationNotificationsWhilePopoverIsOpen() {
+        let runtimeState = PopoverRuntimeState(
+            applicationURLs: [
+                "com.apple.Safari": URL(fileURLWithPath: "/Applications/Safari.app")
+            ],
+            runningBundleIdentifiers: []
+        )
+        let appNotificationCenter = NotificationCenter()
+        let context = makePopoverContext(
+            shortcuts: [
+                AppShortcut(
+                    appName: "Safari",
+                    bundleIdentifier: "com.apple.Safari",
+                    keyEquivalent: "s",
+                    modifierFlags: ["command"]
+                )
+            ],
+            usageTotal: 0,
+            runtimeState: runtimeState,
+            appNotificationCenter: appNotificationCenter
+        )
+
+        #expect(context.model.shortcutRows.first?.isUnavailable == false)
+
+        runtimeState.applicationURLs["com.apple.Safari"] = nil
+        appNotificationCenter.post(
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        drainMainRunLoop()
+
+        #expect(context.model.shortcutRows.first?.isUnavailable == true)
+    }
 }
 
 private struct PopoverContext {
@@ -123,6 +202,9 @@ private func makePopoverContext(
     shortcuts: [AppShortcut],
     runningBundleIdentifiers: Set<String> = [],
     usageTotal: Int,
+    runtimeState: PopoverRuntimeState? = nil,
+    workspaceNotificationCenter: NotificationCenter = NotificationCenter(),
+    appNotificationCenter: NotificationCenter = NotificationCenter(),
     userDefaults: UserDefaults? = nil,
     updateService: FakeUpdateService? = nil,
     openSettings: @escaping @MainActor (SettingsTab?) -> Void = { _ in },
@@ -156,26 +238,55 @@ private func makePopoverContext(
         updateService: updateService,
         userDefaults: defaults
     )
-    let statusProvider = ShortcutStatusProvider(
-        client: .init(
-            applicationURL: { _ in URL(fileURLWithPath: "/Applications/App.app") },
-            runningBundleIdentifiers: {
-                runningBundleIdentifiers
+    let resolvedRuntimeState = runtimeState ?? PopoverRuntimeState(
+        applicationURLs: Dictionary(
+            uniqueKeysWithValues: shortcuts.map { shortcut in
+                (
+                    shortcut.bundleIdentifier,
+                    URL(fileURLWithPath: "/Applications/\(shortcut.appName).app")
+                )
             }
         ),
-        workspaceNotificationCenter: NotificationCenter(),
-        appNotificationCenter: NotificationCenter()
+        runningBundleIdentifiers: runningBundleIdentifiers
+    )
+    let statusProvider = ShortcutStatusProvider(
+        client: .init(
+            applicationURL: { bundleIdentifier in
+                resolvedRuntimeState.applicationURLs[bundleIdentifier]
+            },
+            runningBundleIdentifiers: {
+                resolvedRuntimeState.runningBundleIdentifiers
+            }
+        ),
+        workspaceNotificationCenter: workspaceNotificationCenter,
+        appNotificationCenter: appNotificationCenter
     )
     let model = MenuBarPopoverModel(
         shortcutStore: shortcutStore,
         preferences: preferences,
         shortcutStatusProvider: statusProvider,
         usageTracker: StaticUsageTracker(total: usageTotal),
+        workspaceNotificationCenter: workspaceNotificationCenter,
+        appNotificationCenter: appNotificationCenter,
         openSettings: openSettings,
         quit: quit
     )
 
     return PopoverContext(model: model, preferences: preferences)
+}
+
+@MainActor
+private final class PopoverRuntimeState {
+    var applicationURLs: [String: URL]
+    var runningBundleIdentifiers: Set<String>
+
+    init(
+        applicationURLs: [String: URL],
+        runningBundleIdentifiers: Set<String>
+    ) {
+        self.applicationURLs = applicationURLs
+        self.runningBundleIdentifiers = runningBundleIdentifiers
+    }
 }
 
 private actor StaticUsageTracker: UsageTracking {
@@ -240,6 +351,11 @@ private func waitUntil(
         }
         try? await Task.sleep(for: pollInterval)
     }
+}
+
+@MainActor
+private func drainMainRunLoop() {
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
 }
 
 @MainActor
