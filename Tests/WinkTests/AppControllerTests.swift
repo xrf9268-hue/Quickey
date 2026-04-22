@@ -30,9 +30,6 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
         },
         startShortcutManager: {
             events.append("startShortcutManager")
-        },
-        installMenuBar: {
-            events.append("installMenuBar")
         }
     )
 
@@ -44,7 +41,6 @@ func startupSequenceAppliesPersistedHyperStateBeforeStartingShortcutManager() {
         "readHyperEnabled",
         "setHyper:true",
         "startShortcutManager",
-        "installMenuBar"
     ])
 }
 
@@ -95,9 +91,6 @@ func startupSequenceStartsUpdateServiceBeforeShortcutManager() {
         },
         startShortcutManager: {
             events.append("startShortcutManager")
-        },
-        installMenuBar: {
-            events.append("installMenuBar")
         }
     )
 
@@ -139,9 +132,6 @@ func startupSequenceAppliesPersistedPreferencesBeforeStartingShortcutManager() {
         },
         startShortcutManager: {
             events.append("startShortcutManager")
-        },
-        installMenuBar: {
-            events.append("installMenuBar")
         }
     )
 

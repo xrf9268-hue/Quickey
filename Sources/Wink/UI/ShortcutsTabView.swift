@@ -67,7 +67,8 @@ struct ShortcutsListRowPresentation {
     }
 }
 
-private enum ShortcutBannerPresentation {
+enum ShortcutBannerPresentation: Equatable {
+    case info(title: String, message: String)
     case success(title: String, message: String)
     case warning(title: String, message: String, showsAction: Bool)
 
@@ -86,6 +87,14 @@ private enum ShortcutBannerPresentation {
                 title: "Input Monitoring needed",
                 message: "Hyper shortcuts need Input Monitoring before Wink can capture them.",
                 showsAction: true
+            )
+            return
+        }
+
+        if status.shortcutsPaused {
+            self = .info(
+                title: "Shortcuts paused",
+                message: status.bannerDetail
             )
             return
         }
@@ -305,6 +314,8 @@ struct ShortcutsTabView: View {
     @ViewBuilder
     private var permissionBanner: some View {
         switch ShortcutBannerPresentation(status: preferences.shortcutCaptureStatus) {
+        case let .info(title, message):
+            WinkBanner(kind: .info, title: title, message: message)
         case let .success(title, message):
             WinkBanner(kind: .success, title: title, message: message)
         case let .warning(title, message, showsAction):
@@ -624,51 +635,6 @@ private struct ShortcutRowStatusAnimationKey: Equatable {
     let isRunning: Bool
     let isUnavailable: Bool
     let differentiateWithoutColor: Bool
-}
-
-private struct ShortcutKeycapStrip: View {
-    let labels: [String]
-
-    init(shortcut: AppShortcut) {
-        labels = ShortcutKeycapStrip.labels(
-            keyEquivalent: shortcut.keyEquivalent,
-            modifierFlags: shortcut.modifierFlags
-        )
-    }
-
-    init(shortcut: RecordedShortcut) {
-        labels = ShortcutKeycapStrip.labels(
-            keyEquivalent: shortcut.keyEquivalent,
-            modifierFlags: shortcut.modifierFlags
-        )
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(labels, id: \.self) { label in
-                WinkKeycap(label, size: .small)
-            }
-        }
-    }
-
-    nonisolated private static func labels(keyEquivalent: String, modifierFlags: [String]) -> [String] {
-        modifierFlags.map(symbol(for:)) + [keyLabel(for: keyEquivalent)]
-    }
-
-    nonisolated private static func symbol(for modifier: String) -> String {
-        switch modifier {
-        case "command": return "⌘"
-        case "option": return "⌥"
-        case "control": return "⌃"
-        case "shift": return "⇧"
-        case "function": return "fn"
-        default: return modifier.uppercased()
-        }
-    }
-
-    nonisolated private static func keyLabel(for keyEquivalent: String) -> String {
-        keyEquivalent.count == 1 ? keyEquivalent.uppercased() : keyEquivalent
-    }
 }
 
 private struct SettingsFieldLabel: View {

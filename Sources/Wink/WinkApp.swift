@@ -8,8 +8,26 @@ import SwiftUI
 @main
 struct WinkApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage(AppPreferences.menuBarIconVisibleDefaultsKey)
+    private var menuBarIconVisible = true
 
     var body: some Scene {
+        let menuBarServices = appDelegate.menuBarSceneServices
+        WinkMenuBarScene(isInserted: $menuBarIconVisible) {
+            MenuBarPopoverView(
+                model: MenuBarPopoverModel(
+                    shortcutStore: menuBarServices.shortcutStore,
+                    preferences: menuBarServices.preferences,
+                    shortcutStatusProvider: menuBarServices.shortcutStatusProvider,
+                    usageTracker: menuBarServices.usageTracker,
+                    openSettings: menuBarServices.openSettings,
+                    quit: menuBarServices.quit
+                )
+            )
+            .frame(width: 356)
+            .winkChromeRoot()
+        }
+
         Settings {
             let services = appDelegate.settingsSceneServices
             SettingsView(

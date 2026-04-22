@@ -78,13 +78,26 @@ flowchart LR
 - `SparkleUpdateService`
 
 Responsibilities:
-- declare the SwiftUI `Settings` scene and install the shared `openSettings()` bridge
+- declare the SwiftUI `MenuBarExtra(.window)` and `Settings` scenes and install the shared `openSettings()` bridge
 - start the accessory/menu bar app via `@NSApplicationDelegateAdaptor`
 - start the Sparkle updater when feed configuration is present
 - load persisted shortcuts
 - start global shortcut handling
-- install menu bar UI
-- present Settings and reactivate Wink when AppKit entry points request it
+- keep menu bar insertion bound to the persisted `menuBarIconVisible` preference
+- present Settings and reactivate Wink when first-launch, menu-bar, or reopen entry points request it
+
+### Menu bar shell
+- `WinkMenuBarScene`
+- `MenuBarPopoverView`
+- `ShortcutStatusProvider`
+
+Responsibilities:
+- host `MenuBarExtra("Wink", systemImage: "bolt.square.fill", isInserted: ...)` with `.menuBarExtraStyle(.window)`
+- show the v2 popover shell (wordmark, version, Ready/Paused pill, placeholder search, Today histogram, shortcut rows, action rows)
+- reuse `ShortcutStore` and `ShortcutStatusProvider` so the popover reflects saved ordering plus running/unavailable state
+- route `Manage…` to `Settings > Shortcuts`, `Settings…` to the shared Settings bridge, `Check for Updates…` to Sparkle, and `Quit Wink` to app termination
+- keep `Pause all shortcuts` wired to the real shortcut-capture runtime instead of a UI-only placeholder
+- avoid any fallback `NSStatusItem` / `NSMenu` compatibility shell now that the SwiftUI scene owns the menu bar UI
 
 ### Settings and user interaction
 - `SettingsLauncher`
@@ -100,7 +113,7 @@ Responsibilities:
 - `InsightsViewModel`
 
 Responsibilities:
-- bridge AppKit callers (menu bar, first launch) to SwiftUI `openSettings()` without a custom `NSWindow` host
+- bridge menu bar, first-launch, and reopen callers to SwiftUI `openSettings()` without a custom `NSWindow` host
 - persist the selected Settings tab and reopen that tab on the next Settings launch
 - choose target applications
 - record shortcuts
@@ -230,7 +243,8 @@ Responsibilities:
 ### 1. Startup flow
 ```text
 App launch
-  -> WinkApp declares Settings scene + SettingsCommands
+  -> WinkApp declares MenuBarExtra(.window) + Settings scenes + SettingsCommands
+  -> MenuBarExtra insertion is bound to `menuBarIconVisible`
   -> @NSApplicationDelegateAdaptor creates AppDelegate
   -> AppDelegate.applicationDidFinishLaunching()
   -> NSApp.setActivationPolicy(.accessory)
@@ -247,14 +261,13 @@ App launch
   -> ShortcutCaptureCoordinator syncs providers for the current standard/Hyper split
   -> CarbonHotKeyProvider registers enabled standard shortcuts
   -> EventTapCaptureProvider/EventTapManager starts only when Input Monitoring is granted and Hyper-routed shortcuts exist
-  -> MenuBarController.install()
   -> if this is a fresh install with no saved shortcuts, AppController.openSettings() routes through SettingsLauncher + openSettings()
 ```
 
 ### 2. Add shortcut flow
 ```text
 User opens settings
-  -> MenuBarController / first-launch path calls AppController.openSettings()
+  -> MenuBarPopover Manage… / Settings… or first-launch / reopen path calls AppController.openSettings(tab: ...)
   -> SettingsLauncher.open(tab: ...) optionally records the desired tab
   -> SettingsCommands invokes SwiftUI EnvironmentValues.openSettings
   -> Settings scene presents SettingsView with shared ShortcutEditorState + AppPreferences + InsightsViewModel
@@ -327,9 +340,10 @@ CGEvent callback receives tapDisabledByTimeout / tapDisabledByUserInput
 
 ## Current design choices
 - **SPM-first**: simple repo layout and source organization
-- **AppKit-first runtime with a SwiftUI settings shell**: Wink now uses `@main` + `Settings` scene + `openSettings()` for app settings, while shortcut capture, activation, menu bar management, and system integration remain AppKit-heavy
+- **SwiftUI scene shells over the legacy AppKit menu host**: Wink now uses `@main` + `MenuBarExtra(.window)` + `Settings` + `openSettings()` for the app shell, while shortcut capture, activation, and deeper system integration remain AppKit-heavy
 - **Capability-aware shortcut readiness**: `ShortcutCaptureStatus` separates Accessibility, Input Monitoring, Carbon registration, Hyper event-tap activity, standard-shortcut readiness, and Hyper readiness
 - **Single Settings entry point**: `SettingsLauncher` persists the selected tab and bridges AppKit callers to the SwiftUI environment action instead of maintaining a custom `SettingsWindowController`
+- **Truthful menu bar visibility**: `Show Menu Bar Icon` is only exposed now that `menuBarIconVisible` directly controls `MenuBarExtra.isInserted`, and app reopen remains a recovery path back into Settings when no windows are visible
 - **On-demand Input Monitoring**: startup and later shortcut-routing changes request Input Monitoring only when the current enabled shortcut set actually needs Hyper transport; standard-only configurations stay on the Carbon/Accessibility path without an eager Input Monitoring prompt, and Hyper-required startup defers the Input Monitoring request until Accessibility has actually been granted
 - **Strict persistence schema**: Wink currently supports only the exact `[AppShortcut]` payload it writes today; if `shortcuts.json` is malformed or missing required fields, loading fails loudly, logs `path` plus `reason`, and preserves a `shortcuts.load-failure-*.json` copy instead of silently treating the state as empty
 - **O(1) trigger index**: `ShortcutSignature` dictionary replaces linear scans in the hot path
@@ -355,4 +369,4 @@ CGEvent callback receives tapDisabledByTimeout / tapDisabledByUserInput
 - No dedicated per-shortcut toggle history stack beyond the tracker seed plus the active session's single `previousBundle`
 - No test seam around event-tap capture itself (core logic is testable; tap infrastructure requires real macOS)
 - Signed/notarized release build not yet produced (workflow documented in `docs/signing-and-release.md`)
-- Targeted manual macOS validation is still required for the 2026-04-08 capture/activation/hide redesign, especially Safari-only toggle-off, standard-shortcut vs Hyper parity, permission-state transitions, system apps, hidden/minimized window paths, and timeout-stress behavior
+- Targeted manual macOS validation is still required for the 2026-04-08 capture/activation/hide redesign and the 2026-04-22 `MenuBarExtra(.window)` migration, especially Safari-only toggle-off, standard-shortcut vs Hyper parity, permission-state transitions, menu bar popover open/close behavior, hidden-icon reopen behavior, paused-shortcut suppression, system apps, hidden/minimized window paths, and timeout-stress behavior

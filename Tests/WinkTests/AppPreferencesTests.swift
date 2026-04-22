@@ -260,6 +260,79 @@ func updatePresentation_defaultsToDisabledChecksWithoutService() {
 }
 
 @Test @MainActor
+func initRestoresPausedShortcutPreferenceIntoRuntimeStatus() throws {
+    let suiteName = "AppPreferencesTests.initRestoresPausedShortcutPreferenceIntoRuntimeStatus"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+    defaults.set(true, forKey: AppPreferences.shortcutsPausedDefaultsKey)
+
+    let shortcutStore = ShortcutStore()
+    shortcutStore.replaceAll(with: [
+        AppShortcut(
+            appName: "Safari",
+            bundleIdentifier: "com.apple.Safari",
+            keyEquivalent: "s",
+            modifierFlags: ["command", "shift"]
+        )
+    ])
+    let manager = ShortcutManager(
+        shortcutStore: shortcutStore,
+        persistenceService: TestPersistenceHarness().makePersistenceService(),
+        appSwitcher: FakeAppSwitcher(),
+        captureCoordinator: makeCaptureCoordinator(),
+        permissionService: FakePermissionService(ax: true, input: true),
+        diagnosticClient: .live
+    )
+    manager.save(shortcuts: shortcutStore.shortcuts)
+
+    let preferences = AppPreferences(
+        shortcutManager: manager,
+        userDefaults: defaults
+    )
+
+    #expect(preferences.shortcutsPaused == true)
+    #expect(preferences.shortcutCaptureStatus.shortcutsPaused == true)
+    #expect(preferences.shortcutCaptureStatus.anyShortcutsReady == false)
+}
+
+@Test @MainActor
+func setShortcutsPausedPersistsPreferenceAfterRuntimeUpdate() throws {
+    let suiteName = "AppPreferencesTests.setShortcutsPausedPersistsPreferenceAfterRuntimeUpdate"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defaults.removePersistentDomain(forName: suiteName)
+
+    let shortcutStore = ShortcutStore()
+    shortcutStore.replaceAll(with: [
+        AppShortcut(
+            appName: "Safari",
+            bundleIdentifier: "com.apple.Safari",
+            keyEquivalent: "s",
+            modifierFlags: ["command", "shift"]
+        )
+    ])
+    let manager = ShortcutManager(
+        shortcutStore: shortcutStore,
+        persistenceService: TestPersistenceHarness().makePersistenceService(),
+        appSwitcher: FakeAppSwitcher(),
+        captureCoordinator: makeCaptureCoordinator(),
+        permissionService: FakePermissionService(ax: true, input: true),
+        diagnosticClient: .live
+    )
+    manager.save(shortcuts: shortcutStore.shortcuts)
+
+    let preferences = AppPreferences(
+        shortcutManager: manager,
+        userDefaults: defaults
+    )
+
+    preferences.setShortcutsPaused(true)
+
+    #expect(preferences.shortcutsPaused == true)
+    #expect(preferences.shortcutCaptureStatus.shortcutsPaused == true)
+    #expect(defaults.bool(forKey: AppPreferences.shortcutsPausedDefaultsKey) == true)
+}
+
+@Test @MainActor
 func updatePresentation_checkForUpdatesDelegatesToService() {
     let service = FakeUpdateService(
         isConfigured: true,

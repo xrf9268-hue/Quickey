@@ -33,11 +33,14 @@ struct LaunchAtLoginPresentation: Equatable {
 @Observable
 final class AppPreferences {
     static let frontmostTargetBehaviorDefaultsKey = "frontmostTargetBehavior"
+    static let menuBarIconVisibleDefaultsKey = "menuBarIconVisible"
+    static let shortcutsPausedDefaultsKey = "shortcutsPaused"
 
     private(set) var shortcutCaptureStatus: ShortcutCaptureStatus
     private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     private(set) var launchAtLoginAvailability: LaunchAtLoginAvailability = .available
     var hyperKeyEnabled: Bool = false
+    private(set) var shortcutsPaused: Bool = false
     var frontmostTargetBehavior: FrontmostTargetBehavior {
         didSet {
             guard frontmostTargetBehavior != oldValue else { return }
@@ -123,23 +126,32 @@ final class AppPreferences {
         updateService: UpdateServicing? = nil,
         userDefaults: UserDefaults = .standard
     ) {
+        let initialHyperKeyEnabled = hyperKeyService?.isEnabled ?? false
+        let initialShortcutsPaused = userDefaults.object(forKey: Self.shortcutsPausedDefaultsKey) as? Bool ?? false
+        let initialFrontmostTargetBehavior: FrontmostTargetBehavior
+        if let rawValue = userDefaults.string(forKey: Self.frontmostTargetBehaviorDefaultsKey),
+           let storedBehavior = FrontmostTargetBehavior(rawValue: rawValue) {
+            initialFrontmostTargetBehavior = storedBehavior
+        } else {
+            initialFrontmostTargetBehavior = .toggle
+        }
+
         self.shortcutManager = shortcutManager
         self.hyperKeyService = hyperKeyService
         self.launchAtLoginService = launchAtLoginService
         self.updateService = updateService
         self.userDefaults = userDefaults
+        self.hyperKeyEnabled = initialHyperKeyEnabled
+        self.shortcutsPaused = initialShortcutsPaused
+        self.frontmostTargetBehavior = initialFrontmostTargetBehavior
+
+        shortcutManager.setFrontmostTargetBehavior(initialFrontmostTargetBehavior)
+        shortcutManager.setShortcutsPaused(initialShortcutsPaused)
         self.shortcutCaptureStatus = shortcutManager.shortcutCaptureStatus()
+
         let launchAtLoginSnapshot = launchAtLoginService.snapshot
         self.launchAtLoginStatus = launchAtLoginSnapshot.status
         self.launchAtLoginAvailability = launchAtLoginSnapshot.availability
-        self.hyperKeyEnabled = hyperKeyService?.isEnabled ?? false
-        if let rawValue = userDefaults.string(forKey: Self.frontmostTargetBehaviorDefaultsKey),
-           let storedBehavior = FrontmostTargetBehavior(rawValue: rawValue) {
-            self.frontmostTargetBehavior = storedBehavior
-        } else {
-            self.frontmostTargetBehavior = .toggle
-        }
-        shortcutManager.setFrontmostTargetBehavior(frontmostTargetBehavior)
     }
 
     func refreshPermissions() {
@@ -157,6 +169,17 @@ final class AppPreferences {
     func setLaunchAtLogin(_ enabled: Bool) {
         launchAtLoginService.setEnabled(enabled)
         refreshLaunchAtLoginStatus()
+    }
+
+    func setShortcutsPaused(_ paused: Bool) {
+        guard paused != shortcutsPaused else {
+            return
+        }
+
+        shortcutManager.setShortcutsPaused(paused)
+        userDefaults.set(paused, forKey: Self.shortcutsPausedDefaultsKey)
+        shortcutsPaused = paused
+        refreshPermissions()
     }
 
     func refreshLaunchAtLoginStatus() {

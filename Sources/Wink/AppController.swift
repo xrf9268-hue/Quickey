@@ -12,6 +12,15 @@ final class AppController {
         let settingsLauncher: SettingsLauncher
     }
 
+    struct MenuBarSceneServices {
+        let shortcutStore: ShortcutStore
+        let preferences: AppPreferences
+        let shortcutStatusProvider: ShortcutStatusProvider
+        let usageTracker: any UsageTracking
+        let openSettings: @MainActor (SettingsTab?) -> Void
+        let quit: @MainActor () -> Void
+    }
+
     static let firstLaunchCompletedDefaultsKey = "com.wink.firstLaunchCompleted"
 
     private let shortcutStore = ShortcutStore()
@@ -51,11 +60,6 @@ final class AppController {
         shortcutStore: shortcutStore
     )
     private lazy var appListProvider = AppListProvider()
-    private lazy var menuBarController = MenuBarController(
-        shortcutStore: shortcutStore,
-        onOpenSettings: { [weak self] in self?.openSettings() },
-        onQuit: { NSApplication.shared.terminate(nil) }
-    )
     private lazy var settingsSceneServicesStorage = SettingsSceneServices(
         editor: shortcutEditor,
         preferences: appPreferences,
@@ -63,6 +67,18 @@ final class AppController {
         appListProvider: appListProvider,
         shortcutStatusProvider: settingsShortcutStatusProvider,
         settingsLauncher: settingsLauncher
+    )
+    private lazy var menuBarSceneServicesStorage = MenuBarSceneServices(
+        shortcutStore: shortcutStore,
+        preferences: appPreferences,
+        shortcutStatusProvider: settingsShortcutStatusProvider,
+        usageTracker: usageTracker,
+        openSettings: { [weak self] tab in
+            self?.openSettings(tab: tab)
+        },
+        quit: {
+            NSApplication.shared.terminate(nil)
+        }
     )
 
     init(userDefaults: UserDefaults = .standard) {
@@ -75,6 +91,10 @@ final class AppController {
 
     var settingsLauncherService: SettingsLauncher {
         settingsLauncher
+    }
+
+    var menuBarSceneServices: MenuBarSceneServices {
+        menuBarSceneServicesStorage
     }
 
     func start() {
@@ -94,8 +114,7 @@ final class AppController {
             isHyperEnabled: { hyperKeyService.isEnabled },
             setHyperKeyEnabled: { shortcutManager.setHyperKeyEnabled($0) },
             preparePreferences: { _ = appPreferences },
-            startShortcutManager: { shortcutManager.start() },
-            installMenuBar: { menuBarController.install() }
+            startShortcutManager: { shortcutManager.start() }
         )
 
         if Self.consumeFirstLaunchFlag(
@@ -115,8 +134,8 @@ final class AppController {
         openSettings()
     }
 
-    private func openSettings() {
-        settingsLauncher.open()
+    private func openSettings(tab: SettingsTab? = nil) {
+        settingsLauncher.open(tab: tab)
         NSApp.activate()
     }
 
@@ -128,8 +147,7 @@ final class AppController {
         isHyperEnabled: @MainActor () -> Bool,
         setHyperKeyEnabled: @MainActor (Bool) -> Void,
         preparePreferences: @MainActor () -> Void = {},
-        startShortcutManager: @MainActor () -> Void,
-        installMenuBar: @MainActor () -> Void
+        startShortcutManager: @MainActor () -> Void
     ) {
         startUpdateService()
         do {
@@ -143,7 +161,6 @@ final class AppController {
         setHyperKeyEnabled(isHyperEnabled())
         preparePreferences()
         startShortcutManager()
-        installMenuBar()
     }
 
     /// Returns true exactly once per install, and only when no shortcuts exist yet.

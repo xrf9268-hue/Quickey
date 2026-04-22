@@ -251,6 +251,13 @@ private func standardShortcutKeyPress() -> KeyPress {
     )
 }
 
+private func alternateStandardShortcutKeyPress() -> KeyPress {
+    KeyPress(
+        keyCode: UInt16(kVK_ANSI_T),
+        modifiers: [.command, .shift]
+    )
+}
+
 @Test @MainActor
 func helperBuiltShortcutManagerCanPersistIntoInjectedHarness() throws {
     let shortcuts = [standardShortcut()]
@@ -356,6 +363,32 @@ func availabilityLossRemovesRegisteredShortcutsWithoutAnotherSave() {
     context.manager.checkPermissionChange()
 
     #expect(context.standardProvider.registeredShortcuts.isEmpty)
+}
+
+@Test @MainActor
+func resumeRebuildsAvailableShortcutSetAfterAvailabilityChangesWhilePaused() {
+    let bundleLocatorState = MutableAppBundleLocatorState(entries: [
+        "com.apple.Safari": URL(fileURLWithPath: "/Applications/Safari.app")
+    ])
+    let context = makeShortcutManager(
+        permissionService: FakePermissionService(ax: true, input: false),
+        appBundleLocator: AppBundleLocator { bundleIdentifier in
+            bundleLocatorState.entries[bundleIdentifier]
+        }
+    )
+    context.manager.save(shortcuts: [standardShortcut(), alternateStandardShortcut()])
+    context.manager.start()
+
+    #expect(context.standardProvider.registeredShortcuts == [standardShortcutKeyPress()])
+
+    context.manager.setShortcutsPaused(true)
+    bundleLocatorState.entries = [
+        "com.apple.Terminal": URL(fileURLWithPath: "/Applications/Utilities/Terminal.app")
+    ]
+
+    context.manager.setShortcutsPaused(false)
+
+    #expect(context.standardProvider.registeredShortcuts == [alternateStandardShortcutKeyPress()])
 }
 
 @Test @MainActor
