@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Testing
 @testable import Wink
 
@@ -172,4 +173,242 @@ private final class DiagnosticRecorder: @unchecked Sendable {
     func append(_ message: String) {
         messages.append(message)
     }
+}
+
+@Suite("Usage database bootstrap")
+struct UsageDatabaseBootstrapTests {
+    @Test
+    func usageTrackerWritesHourlyRowsAndIndexToPersistentDatabase() async throws {
+        let harness = TestPersistenceHarness()
+        defer { harness.cleanup() }
+
+        let databaseURL = harness.directory.appendingPathComponent("usage.db")
+        let tracker = UsageTracker(
+            databasePath: databaseURL.path,
+            timeZoneProvider: { TimeZone(secondsFromGMT: 0)! }
+        )
+        let shortcutID = UUID()
+        let timestamp = isoDateTime("2026-04-22T09:15:00Z")
+
+        await tracker.recordUsage(shortcutId: shortcutID, on: timestamp)
+        await tracker.recordUsage(shortcutId: shortcutID, on: timestamp)
+
+        let row = try #require(try usageHourlyRows(at: databaseURL).first)
+        #expect(row.date == "2026-04-22")
+        #expect(row.hour == 9)
+        #expect(row.count == 2)
+        #expect(try userVersion(at: databaseURL) == UsageDatabaseBootstrap.requiredSchemaVersion)
+        #expect(try tableColumns(named: "daily_usage", at: databaseURL) == ["shortcut_id", "date", "count"])
+        #expect(try tableColumns(named: "usage_hourly", at: databaseURL) == ["shortcut_id", "date", "hour", "count"])
+        #expect(try indexNames(for: "usage_hourly", at: databaseURL).contains("idx_usage_hourly_date_hour"))
+    }
+
+    @Test
+    func startupBootstrapDeletesLegacyUsageDailySchemaBeforeHourlyBoot() throws {
+        let harness = TestPersistenceHarness()
+        defer { harness.cleanup() }
+        let diagnostics = DiagnosticRecorder()
+        let databaseURL = harness.directory.appendingPathComponent("usage.db")
+
+        try seedLegacyUsageDatabase(at: databaseURL)
+
+        UsageDatabaseBootstrap.prepareDatabase(
+            at: databaseURL.path,
+            diagnosticClient: .init(log: { message in
+                diagnostics.append(message)
+            })
+        )
+
+        #expect(FileManager.default.fileExists(atPath: databaseURL.path) == false)
+        _ = UsageTracker(databasePath: databaseURL.path)
+
+        #expect(FileManager.default.fileExists(atPath: databaseURL.path))
+        #expect(try tableNames(at: databaseURL).contains("usage_daily") == false)
+        #expect(try tableColumns(named: "daily_usage", at: databaseURL) == ["shortcut_id", "date", "count"])
+        #expect(try tableColumns(named: "usage_hourly", at: databaseURL) == ["shortcut_id", "date", "hour", "count"])
+        #expect(diagnostics.messages.contains {
+            $0.contains("Reset usage database for hourly schema migration")
+                && $0.contains("oldUserVersion=1")
+        })
+    }
+}
+
+private func isoDateTime(_ value: String) -> Date {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter.date(from: value)!
+}
+
+private func userVersion(at url: URL) throws -> Int {
+    try withSQLiteDatabase(at: url) { db in
+        try integerResult(for: "PRAGMA user_version", in: db)
+    }
+}
+
+private func usageHourlyRows(at url: URL) throws -> [(date: String, hour: Int, count: Int)] {
+    try withSQLiteDatabase(at: url) { db in
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(
+            db,
+            "SELECT date, hour, count FROM usage_hourly ORDER BY date, hour",
+            -1,
+            &statement,
+            nil
+        ) == SQLITE_OK else {
+            throw SQLiteTestError.prepareFailed(message: sqliteMessage(from: db))
+        }
+
+        var rows: [(date: String, hour: Int, count: Int)] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let dateText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+
+            rows.append(
+                (
+                    date: String(cString: dateText),
+                    hour: Int(sqlite3_column_int(statement, 1)),
+                    count: Int(sqlite3_column_int64(statement, 2))
+                )
+            )
+        }
+
+        return rows
+    }
+}
+
+private func tableColumns(named tableName: String, at url: URL) throws -> [String] {
+    try withSQLiteDatabase(at: url) { db in
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        let sql = "PRAGMA table_info(\(tableName))"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw SQLiteTestError.prepareFailed(message: sqliteMessage(from: db))
+        }
+
+        var columns: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let columnText = sqlite3_column_text(statement, 1) else {
+                continue
+            }
+            columns.append(String(cString: columnText))
+        }
+        return columns
+    }
+}
+
+private func indexNames(for tableName: String, at url: URL) throws -> [String] {
+    try withSQLiteDatabase(at: url) { db in
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        let sql = "PRAGMA index_list(\(tableName))"
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw SQLiteTestError.prepareFailed(message: sqliteMessage(from: db))
+        }
+
+        var indexes: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let indexText = sqlite3_column_text(statement, 1) else {
+                continue
+            }
+            indexes.append(String(cString: indexText))
+        }
+        return indexes
+    }
+}
+
+private func tableNames(at url: URL) throws -> [String] {
+    try withSQLiteDatabase(at: url) { db in
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+            -1,
+            &statement,
+            nil
+        ) == SQLITE_OK else {
+            throw SQLiteTestError.prepareFailed(message: sqliteMessage(from: db))
+        }
+
+        var names: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let nameText = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            names.append(String(cString: nameText))
+        }
+        return names
+    }
+}
+
+private func seedLegacyUsageDatabase(at url: URL) throws {
+    try withSQLiteDatabase(at: url) { db in
+        try executeSQL(
+            """
+            CREATE TABLE usage_daily (
+                date  TEXT NOT NULL PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO usage_daily (date, count) VALUES ('2026-04-22', 7);
+            PRAGMA user_version = 1;
+            """,
+            in: db
+        )
+    }
+}
+
+private func integerResult(for sql: String, in db: OpaquePointer?) throws -> Int {
+    var statement: OpaquePointer?
+    defer { sqlite3_finalize(statement) }
+
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+        throw SQLiteTestError.prepareFailed(message: sqliteMessage(from: db))
+    }
+
+    guard sqlite3_step(statement) == SQLITE_ROW else {
+        throw SQLiteTestError.stepFailed(message: sqliteMessage(from: db))
+    }
+
+    return Int(sqlite3_column_int64(statement, 0))
+}
+
+private func executeSQL(_ sql: String, in db: OpaquePointer?) throws {
+    var errorMessage: UnsafeMutablePointer<CChar>?
+    guard sqlite3_exec(db, sql, nil, nil, &errorMessage) == SQLITE_OK else {
+        let message = errorMessage.map { String(cString: $0) } ?? sqliteMessage(from: db)
+        sqlite3_free(errorMessage)
+        throw SQLiteTestError.execFailed(message: message)
+    }
+}
+
+private func withSQLiteDatabase<T>(at url: URL, body: (OpaquePointer?) throws -> T) throws -> T {
+    var db: OpaquePointer?
+    guard sqlite3_open(url.path, &db) == SQLITE_OK else {
+        let message = sqliteMessage(from: db)
+        sqlite3_close(db)
+        throw SQLiteTestError.openFailed(message: message)
+    }
+
+    defer { sqlite3_close(db) }
+    return try body(db)
+}
+
+private func sqliteMessage(from db: OpaquePointer?) -> String {
+    guard let db else {
+        return "unknown SQLite error"
+    }
+    return String(cString: sqlite3_errmsg(db))
+}
+
+private enum SQLiteTestError: Error {
+    case openFailed(message: String)
+    case prepareFailed(message: String)
+    case stepFailed(message: String)
+    case execFailed(message: String)
 }

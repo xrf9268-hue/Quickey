@@ -89,6 +89,18 @@ final class MenuBarPopoverModel {
         preferences.updatePresentation.checkForUpdatesEnabled
     }
 
+    var filteredShortcutRows: [ShortcutRow] {
+        let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearch.isEmpty else {
+            return shortcutRows
+        }
+
+        return shortcutRows.filter { row in
+            row.title.localizedCaseInsensitiveContains(trimmedSearch)
+                || row.shortcut.bundleIdentifier.localizedCaseInsensitiveContains(trimmedSearch)
+        }
+    }
+
     func refresh() {
         let shortcuts = shortcutStore.shortcuts
         shortcutStatusProvider.track(shortcuts)
@@ -162,14 +174,13 @@ final class MenuBarPopoverModel {
         let usageTracker = self.usageTracker
         usageRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let dailyCounts = await usageTracker.dailyCounts(days: 1)
-            let totalCount = dailyCounts.values
-                .flatMap { $0 }
-                .reduce(0) { partialResult, item in
-                    partialResult + item.count
-                }
-            let average = totalCount > 0 ? Double(totalCount) / 24.0 : 0
-            let bars = Array(repeating: average, count: 24)
+            let hourlyBuckets = await usageTracker.hourlyCounts(days: 1)
+            let bars = hourlyBuckets.isEmpty
+                ? Array(repeating: 0.0, count: 24)
+                : hourlyBuckets.map(\.count).map(Double.init)
+            let totalCount = hourlyBuckets.reduce(0) { partialResult, item in
+                partialResult + item.count
+            }
             guard !Task.isCancelled else { return }
             todayActivationCount = totalCount
             todayHistogramBars = bars
@@ -261,12 +272,20 @@ struct MenuBarPopoverView: View {
                     .padding(.horizontal, 14)
                     .padding(.top, 14)
                     .padding(.bottom, 10)
+            } else if model.filteredShortcutRows.isEmpty {
+                Text("No shortcuts match your search")
+                    .font(WinkType.bodyText)
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(model.shortcutRows.enumerated()), id: \.element.id) { index, row in
+                    ForEach(Array(model.filteredShortcutRows.enumerated()), id: \.element.id) { index, row in
                         MenuBarShortcutRow(row: row)
 
-                        if index < model.shortcutRows.count - 1 {
+                        if index < model.filteredShortcutRows.count - 1 {
                             Divider()
                                 .overlay(palette.hairline)
                                 .padding(.leading, 48)

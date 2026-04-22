@@ -11,6 +11,7 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
+RESOURCE_BUNDLE_NAME="${APP_NAME}_${APP_NAME}.bundle"
 INFO_PLIST="$PROJECT_DIR/Sources/Wink/Resources/Info.plist"
 APP_ICON="$PROJECT_DIR/Sources/Wink/Resources/AppIcon.icns"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Wink}"
@@ -57,6 +58,10 @@ PY
     if [ "${#candidates[@]}" -eq 1 ]; then
         printf '%s\n' "${candidates[0]}"
     fi
+}
+
+find_resource_bundle() {
+    find "$PROJECT_DIR/.build" -path "*/release/${RESOURCE_BUNDLE_NAME}" -type d 2>/dev/null | sort | tail -n 1
 }
 
 apply_sparkle_info_overrides() {
@@ -118,6 +123,15 @@ if [ -f "$APP_ICON" ]; then
     echo "    AppIcon.icns copied to Resources"
 else
     echo "Warning: AppIcon.icns not found at $APP_ICON" >&2
+fi
+
+RESOURCE_BUNDLE_SOURCE="$(find_resource_bundle)"
+if [ -n "$RESOURCE_BUNDLE_SOURCE" ] && [ -d "$RESOURCE_BUNDLE_SOURCE" ]; then
+    ditto "$RESOURCE_BUNDLE_SOURCE" "$RESOURCES_DIR/$RESOURCE_BUNDLE_NAME"
+    echo "    $RESOURCE_BUNDLE_NAME copied to Resources"
+else
+    echo "Error: package resource bundle not found at release build output (${RESOURCE_BUNDLE_NAME})" >&2
+    exit 1
 fi
 
 # Copy Info.plist from canonical source

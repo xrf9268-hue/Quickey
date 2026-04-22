@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "PersistenceService")
@@ -127,5 +128,109 @@ struct PersistenceService: Sendable {
         let message = error.localizedDescription
         logger.error("\(message, privacy: .public)")
         diagnosticClient.log(message)
+    }
+}
+
+enum UsageDatabaseBootstrap {
+    static let requiredSchemaVersion = 2
+
+    static func prepareDatabase(
+        at path: String,
+        diagnosticClient: PersistenceService.DiagnosticClient = .live,
+        fileManager: FileManager = .default
+    ) {
+        guard !path.isEmpty, path != ":memory:" else {
+            return
+        }
+
+        guard fileManager.fileExists(atPath: path) else {
+            return
+        }
+
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            let message = "Failed to inspect usage database before hourly schema bootstrap: path=\(path)"
+            logger.error("\(message, privacy: .public)")
+            diagnosticClient.log(message)
+            if let db {
+                sqlite3_close(db)
+            }
+            return
+        }
+
+        defer {
+            if let db {
+                sqlite3_close(db)
+            }
+        }
+
+        let userVersion = integerPragma("PRAGMA user_version", in: db) ?? 0
+        let dailyColumns = tableColumns(named: "daily_usage", in: db)
+        let hourlyColumns = tableColumns(named: "usage_hourly", in: db)
+        let shouldReset =
+            userVersion != requiredSchemaVersion ||
+            dailyColumns != ["shortcut_id", "date", "count"] ||
+            hourlyColumns != ["shortcut_id", "date", "hour", "count"]
+
+        guard shouldReset else {
+            return
+        }
+
+        sqlite3_close(db)
+        db = nil
+
+        do {
+            try fileManager.removeItem(atPath: path)
+            let message = """
+                Reset usage database for hourly schema migration: path=\(path) oldUserVersion=\(userVersion) \
+                dailyColumns=\(dailyColumns.joined(separator: ",")) \
+                hourlyColumns=\(hourlyColumns.joined(separator: ","))
+                """
+            logger.error("\(message, privacy: .public)")
+            diagnosticClient.log(message)
+        } catch {
+            let message = "Failed to reset usage database for hourly schema migration: path=\(path) reason=\(error.localizedDescription)"
+            logger.error("\(message, privacy: .public)")
+            diagnosticClient.log(message)
+        }
+    }
+
+    private static func integerPragma(_ sql: String, in db: OpaquePointer?) -> Int? {
+        guard let db else { return nil }
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_finalize(stmt)
+            return nil
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        guard sqlite3_step(stmt) == SQLITE_ROW else {
+            return nil
+        }
+
+        return Int(sqlite3_column_int64(stmt, 0))
+    }
+
+    private static func tableColumns(named tableName: String, in db: OpaquePointer?) -> [String] {
+        guard let db else { return [] }
+
+        var stmt: OpaquePointer?
+        let sql = "PRAGMA table_info(\(tableName))"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_finalize(stmt)
+            return []
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var columns: [String] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let columnName = sqlite3_column_text(stmt, 1) else {
+                continue
+            }
+            columns.append(String(cString: columnName))
+        }
+
+        return columns
     }
 }

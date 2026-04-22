@@ -1,15 +1,25 @@
+import AppKit
+import DeveloperToolsSupport
 import SwiftUI
 
 struct WinkMenuBarSceneDescriptor: Equatable {
     let title: String
-    let systemImage: String
+    let imageName: String
     let usesWindowStyle: Bool
     let isInserted: Bool
 }
 
+enum WinkMenuBarTemplateAsset {
+    static let name = "MenuBarTemplate"
+    static let imageResource = ImageResource(name: name, bundle: .module)
+
+    static var image: NSImage {
+        NSImage(resource: imageResource)
+    }
+}
+
 private enum WinkMenuBarSceneConstants {
     static let title = "Wink"
-    static let systemImage = "bolt.square.fill"
 }
 
 struct WinkMenuBarScene<Content: View>: Scene {
@@ -27,7 +37,7 @@ struct WinkMenuBarScene<Content: View>: Scene {
     nonisolated static func descriptor(isInserted: Bool) -> WinkMenuBarSceneDescriptor {
         WinkMenuBarSceneDescriptor(
             title: WinkMenuBarSceneConstants.title,
-            systemImage: WinkMenuBarSceneConstants.systemImage,
+            imageName: WinkMenuBarTemplateAsset.name,
             usesWindowStyle: true,
             isInserted: isInserted
         )
@@ -36,7 +46,7 @@ struct WinkMenuBarScene<Content: View>: Scene {
     var body: some Scene {
         MenuBarExtra(
             WinkMenuBarSceneConstants.title,
-            systemImage: WinkMenuBarSceneConstants.systemImage,
+            image: WinkMenuBarTemplateAsset.imageResource,
             isInserted: $isInserted
         ) {
             content()

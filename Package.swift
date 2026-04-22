@@ -23,6 +23,12 @@ let package = Package(
                 "Resources/Info.plist",
                 "Resources/AppIcon.svg",
                 "Resources/AppIcon.icns",
+                "Resources/MenuBarTemplate.svg",
+            ],
+            resources: [
+                .process("Resources/MenuBarAssets.xcassets"),
+                .process("Resources/MenuBarTemplate.png"),
+                .process("Resources/MenuBarTemplate@2x.png"),
             ],
             swiftSettings: [
                 .define("DEBUG", .when(configuration: .debug)),
