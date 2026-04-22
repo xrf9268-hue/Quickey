@@ -626,51 +626,6 @@ private struct ShortcutRowStatusAnimationKey: Equatable {
     let differentiateWithoutColor: Bool
 }
 
-private struct ShortcutKeycapStrip: View {
-    let labels: [String]
-
-    init(shortcut: AppShortcut) {
-        labels = ShortcutKeycapStrip.labels(
-            keyEquivalent: shortcut.keyEquivalent,
-            modifierFlags: shortcut.modifierFlags
-        )
-    }
-
-    init(shortcut: RecordedShortcut) {
-        labels = ShortcutKeycapStrip.labels(
-            keyEquivalent: shortcut.keyEquivalent,
-            modifierFlags: shortcut.modifierFlags
-        )
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(labels, id: \.self) { label in
-                WinkKeycap(label, size: .small)
-            }
-        }
-    }
-
-    nonisolated private static func labels(keyEquivalent: String, modifierFlags: [String]) -> [String] {
-        modifierFlags.map(symbol(for:)) + [keyLabel(for: keyEquivalent)]
-    }
-
-    nonisolated private static func symbol(for modifier: String) -> String {
-        switch modifier {
-        case "command": return "⌘"
-        case "option": return "⌥"
-        case "control": return "⌃"
-        case "shift": return "⇧"
-        case "function": return "fn"
-        default: return modifier.uppercased()
-        }
-    }
-
-    nonisolated private static func keyLabel(for keyEquivalent: String) -> String {
-        keyEquivalent.count == 1 ? keyEquivalent.uppercased() : keyEquivalent
-    }
-}
-
 private struct SettingsFieldLabel: View {
     @Environment(\.winkPalette) private var palette
 

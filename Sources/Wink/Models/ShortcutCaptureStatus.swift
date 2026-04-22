@@ -6,6 +6,7 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
     let eventTapActive: Bool
     let standardShortcutsReady: Bool
     let hyperShortcutsReady: Bool
+    let shortcutsPaused: Bool
     let standardShortcutCount: Int
     let registeredStandardShortcutCount: Int
     let standardRegistrationFailures: [ShortcutCaptureRegistrationFailure]
@@ -18,6 +19,7 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
         eventTapActive: Bool,
         standardShortcutsReady: Bool,
         hyperShortcutsReady: Bool,
+        shortcutsPaused: Bool = false,
         standardShortcutCount: Int = 0,
         registeredStandardShortcutCount: Int = 0,
         standardRegistrationFailures: [ShortcutCaptureRegistrationFailure] = []
@@ -29,16 +31,20 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
         self.eventTapActive = eventTapActive
         self.standardShortcutsReady = standardShortcutsReady
         self.hyperShortcutsReady = hyperShortcutsReady
+        self.shortcutsPaused = shortcutsPaused
         self.standardShortcutCount = standardShortcutCount
         self.registeredStandardShortcutCount = registeredStandardShortcutCount
         self.standardRegistrationFailures = standardRegistrationFailures
     }
 
     var anyShortcutsReady: Bool {
-        standardShortcutsReady || hyperShortcutsReady
+        !shortcutsPaused && (standardShortcutsReady || hyperShortcutsReady)
     }
 
     var permissionWarning: String? {
+        guard !shortcutsPaused else {
+            return nil
+        }
         guard accessibilityGranted else {
             return "Accessibility permission is required for app switching."
         }
@@ -58,6 +64,10 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
     }
 
     var bannerDetail: String {
+        if shortcutsPaused {
+            return "All shortcuts are paused."
+        }
+
         if let warning = permissionWarning {
             return warning
         }
@@ -78,6 +88,9 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
     }
 
     var systemSettingsGuidance: String? {
+        guard !shortcutsPaused else {
+            return nil
+        }
         guard permissionWarning == nil, standardRegistrationWarning == nil else {
             return nil
         }
@@ -90,6 +103,9 @@ struct ShortcutCaptureStatus: Equatable, Sendable {
     }
 
     var standardRegistrationWarning: String? {
+        guard !shortcutsPaused else {
+            return nil
+        }
         let failedCount = max(0, standardShortcutCount - registeredStandardShortcutCount)
         guard failedCount > 0 else {
             return nil

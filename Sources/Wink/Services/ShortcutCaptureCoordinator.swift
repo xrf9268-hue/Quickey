@@ -12,6 +12,7 @@ enum ShortcutCaptureRoute: Equatable, Sendable {
 struct ShortcutCaptureSnapshot: Equatable, Sendable {
     let carbonHotKeysRegistered: Bool
     let eventTapActive: Bool
+    let shortcutsPaused: Bool
     let standardShortcutCount: Int
     let registeredStandardShortcutCount: Int
     let standardRegistrationFailures: [ShortcutCaptureRegistrationFailure]
@@ -29,6 +30,7 @@ final class ShortcutCaptureCoordinator {
     private var hyperShortcuts: Set<KeyPress> = []
     private var hyperKeyEnabled = false
     private var inputMonitoringGranted = false
+    private var capturePaused = false
     private var onKeyPress: (@MainActor @Sendable (KeyPress) -> Void)?
 
     init(
@@ -71,6 +73,11 @@ final class ShortcutCaptureCoordinator {
         syncProviders()
     }
 
+    func setCapturePaused(_ paused: Bool) {
+        capturePaused = paused
+        syncProviders()
+    }
+
     var inputMonitoringRequired: Bool {
         !hyperShortcuts.isEmpty
     }
@@ -83,10 +90,14 @@ final class ShortcutCaptureCoordinator {
         let standardShortcutCount = standardRegistrationState.desiredShortcutCount
         let allStandardShortcutsRegistered = standardShortcutCount == 0
             || standardRegistrationState.registeredShortcutCount == standardShortcutCount
-        let carbonHotKeysRegistered = standardShortcutCount > 0 && allStandardShortcutsRegistered
-        let standardReady = accessibilityGranted
+        let carbonHotKeysRegistered = !capturePaused
+            && standardShortcutCount > 0
+            && allStandardShortcutsRegistered
+        let standardReady = !capturePaused
+            && accessibilityGranted
             && (standardShortcutCount == 0 || allStandardShortcutsRegistered)
-        let hyperReady = accessibilityGranted
+        let hyperReady = !capturePaused
+            && accessibilityGranted
             && (hyperShortcuts.isEmpty || (inputMonitoringGranted && hyperProvider.isRunning))
 
         return ShortcutCaptureStatus(
@@ -94,9 +105,10 @@ final class ShortcutCaptureCoordinator {
             inputMonitoringGranted: inputMonitoringGranted,
             inputMonitoringRequired: inputMonitoringRequired,
             carbonHotKeysRegistered: carbonHotKeysRegistered,
-            eventTapActive: hyperProvider.isRunning,
+            eventTapActive: !capturePaused && hyperProvider.isRunning,
             standardShortcutsReady: standardReady,
             hyperShortcutsReady: hyperReady,
+            shortcutsPaused: capturePaused,
             standardShortcutCount: standardShortcutCount,
             registeredStandardShortcutCount: standardRegistrationState.registeredShortcutCount,
             standardRegistrationFailures: standardRegistrationState.failures
@@ -106,11 +118,13 @@ final class ShortcutCaptureCoordinator {
     func snapshot() -> ShortcutCaptureSnapshot {
         let standardRegistrationState = standardProvider.registrationState
         let standardShortcutCount = standardRegistrationState.desiredShortcutCount
-        let carbonHotKeysRegistered = standardShortcutCount > 0
+        let carbonHotKeysRegistered = !capturePaused
+            && standardShortcutCount > 0
             && standardRegistrationState.registeredShortcutCount == standardShortcutCount
         return ShortcutCaptureSnapshot(
             carbonHotKeysRegistered: carbonHotKeysRegistered,
-            eventTapActive: hyperProvider.isRunning,
+            eventTapActive: !capturePaused && hyperProvider.isRunning,
+            shortcutsPaused: capturePaused,
             standardShortcutCount: standardShortcutCount,
             registeredStandardShortcutCount: standardRegistrationState.registeredShortcutCount,
             standardRegistrationFailures: standardRegistrationState.failures,
@@ -144,7 +158,7 @@ final class ShortcutCaptureCoordinator {
         hyperProvider.updateRegisteredShortcuts(hyperShortcuts)
         hyperProvider.setHyperKeyEnabled(hyperKeyEnabled && !hyperShortcuts.isEmpty)
 
-        guard let onKeyPress else {
+        guard let onKeyPress, !capturePaused else {
             standardProvider.stop()
             hyperProvider.stop()
             return

@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appController.settingsLauncherService
     }
 
+    var menuBarSceneServices: AppController.MenuBarSceneServices {
+        appController.menuBarSceneServices
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // SwiftUI's `Settings` scene defaults the app to `.regular` activation,
         // which would surface a Dock icon and About menu we don't want for a
@@ -21,6 +25,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         appController.start()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else {
+            return true
+        }
+
+        // Keep a recovery path into Settings when the menu bar icon is hidden
+        // or no Settings window is currently visible.
+        appController.openPrimarySettingsWindow()
+        return true
     }
 
     func openPrimarySettingsWindow() {

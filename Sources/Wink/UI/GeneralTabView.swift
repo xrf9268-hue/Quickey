@@ -9,6 +9,8 @@ private enum GeneralTabLinks {
 
 struct GeneralTabView: View {
     @Environment(\.winkPalette) private var palette
+    @AppStorage(AppPreferences.menuBarIconVisibleDefaultsKey)
+    private var menuBarIconVisible = true
 
     var preferences: AppPreferences
     @Bindable var editor: ShortcutEditorState
@@ -35,6 +37,12 @@ struct GeneralTabView: View {
                             )
                         )
                         .disabled(!preferences.launchAtLoginPresentation.toggleIsEnabled)
+
+                        SettingsToggleRow(
+                            title: "Show Menu Bar Icon",
+                            subtitle: "Keep Wink visible in the macOS menu bar.",
+                            isOn: $menuBarIconVisible
+                        )
 
                         if let message = preferences.launchAtLoginPresentation.message {
                             VStack(alignment: .leading, spacing: 8) {

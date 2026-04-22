@@ -26,6 +26,7 @@ final class ShortcutManager {
     private var lastInputMonitoringState: Bool = false
     private var lastAvailableShortcutBundleIdentifiers: Set<String> = []
     private var hyperKeyEnabled = false
+    private var shortcutsPaused = false
     private var lastCaptureBlockedMessages: Set<String> = []
     private var hasStarted = false
 
@@ -52,17 +53,22 @@ final class ShortcutManager {
     func start() {
         rebuildIndex()
         let inputMonitoringRequired = captureCoordinator.inputMonitoringRequired
-        let shouldRequestInputMonitoring = inputMonitoringRequired
-            && permissionService.isAccessibilityTrusted()
-        let ready = permissionService.requestIfNeeded(
-            prompt: true,
-            inputMonitoringRequired: shouldRequestInputMonitoring
-        )
+        let ready: Bool
+        if shortcutsPaused {
+            ready = false
+        } else {
+            let shouldRequestInputMonitoring = inputMonitoringRequired
+                && permissionService.isAccessibilityTrusted()
+            ready = permissionService.requestIfNeeded(
+                prompt: true,
+                inputMonitoringRequired: shouldRequestInputMonitoring
+            )
+        }
         logger.info(
-            "start(): ready=\(ready), ax=\(self.permissionService.isAccessibilityTrusted()), im=\(self.permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired)"
+            "start(): ready=\(ready), ax=\(self.permissionService.isAccessibilityTrusted()), im=\(self.permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired), paused=\(self.shortcutsPaused)"
         )
         diagnosticClient.log(
-            "start(): ready=\(ready), ax=\(permissionService.isAccessibilityTrusted()), im=\(permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired)"
+            "start(): ready=\(ready), ax=\(permissionService.isAccessibilityTrusted()), im=\(permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired), paused=\(shortcutsPaused)"
         )
         hasStarted = true
         startPermissionMonitoring()
@@ -113,6 +119,32 @@ final class ShortcutManager {
 
     func setFrontmostTargetBehavior(_ behavior: FrontmostTargetBehavior) {
         appSwitcher.setFrontmostTargetBehavior(behavior)
+    }
+
+    func setShortcutsPaused(_ paused: Bool) {
+        guard shortcutsPaused != paused else {
+            return
+        }
+
+        shortcutsPaused = paused
+        captureCoordinator.setCapturePaused(paused)
+
+        guard hasStarted else {
+            return
+        }
+
+        if paused {
+            diagnosticClient.log("Shortcut capture paused")
+            return
+        }
+
+        let shouldRequestInputMonitoring = captureCoordinator.inputMonitoringRequired
+            && permissionService.isAccessibilityTrusted()
+        _ = permissionService.requestIfNeeded(
+            prompt: true,
+            inputMonitoringRequired: shouldRequestInputMonitoring
+        )
+        attemptStartIfPermitted()
     }
 
     func requestPermissions() {
@@ -188,6 +220,11 @@ final class ShortcutManager {
             return
         }
 
+        if shortcutsPaused {
+            captureCoordinator.refreshInputMonitoring(granted: imGranted)
+            return
+        }
+
         let availabilityChanged = refreshShortcutAvailabilityIfNeeded()
         let inputMonitoringRequirementChanged = !inputMonitoringWasRequired
             && captureCoordinator.inputMonitoringRequired
@@ -238,6 +275,28 @@ final class ShortcutManager {
     }
 
     private func attemptStartIfPermitted() {
+        captureCoordinator.refreshInputMonitoring(granted: permissionService.isInputMonitoringTrusted())
+        captureCoordinator.setHyperKeyEnabled(hyperKeyEnabled)
+        captureCoordinator.setCapturePaused(shortcutsPaused)
+
+        if shortcutsPaused {
+            captureCoordinator.start(inputMonitoringGranted: permissionService.isInputMonitoringTrusted()) { [weak self] keyPress in
+                #if DEBUG
+                logger.debug("KeyPress received: keyCode=\(keyPress.keyCode) modifiers=\(keyPress.modifiers.rawValue)")
+                #endif
+                _ = self?.handleKeyPress(keyPress)
+            }
+            let snapshot = captureCoordinator.snapshot()
+            logger.info(
+                "attemptStart: shortcuts=\(self.shortcutStore.shortcuts.count) triggerIndex=\(self.triggerIndex.count) carbon=\(snapshot.carbonHotKeysRegistered) eventTap=\(snapshot.eventTapActive) paused=true"
+            )
+            diagnosticClient.log(
+                "attemptStart: shortcuts=\(shortcutStore.shortcuts.count) triggerIndex=\(triggerIndex.count) carbon=\(snapshot.carbonHotKeysRegistered) eventTap=\(snapshot.eventTapActive) paused=true"
+            )
+            lastCaptureBlockedMessages = []
+            return
+        }
+
         guard permissionService.isAccessibilityTrusted() else {
             #if DEBUG
             logger.debug("attemptStart: accessibility not granted, skipping")
@@ -246,8 +305,6 @@ final class ShortcutManager {
             return
         }
 
-        captureCoordinator.refreshInputMonitoring(granted: permissionService.isInputMonitoringTrusted())
-        captureCoordinator.setHyperKeyEnabled(hyperKeyEnabled)
         captureCoordinator.start(inputMonitoringGranted: permissionService.isInputMonitoringTrusted()) { [weak self] keyPress in
             #if DEBUG
             logger.debug("KeyPress received: keyCode=\(keyPress.keyCode) modifiers=\(keyPress.modifiers.rawValue)")
@@ -270,7 +327,11 @@ final class ShortcutManager {
         }
 
         let inputMonitoringRequired = captureCoordinator.inputMonitoringRequired
-        if !inputMonitoringWasRequired && inputMonitoringRequired && permissionService.isAccessibilityTrusted() {
+        if !shortcutsPaused
+            && !inputMonitoringWasRequired
+            && inputMonitoringRequired
+            && permissionService.isAccessibilityTrusted()
+        {
             _ = permissionService.requestIfNeeded(
                 prompt: true,
                 inputMonitoringRequired: true
@@ -341,6 +402,11 @@ final class ShortcutManager {
     }
 
     private func emitCaptureBlockedDiagnostics(snapshot: ShortcutCaptureSnapshot) {
+        guard !snapshot.shortcutsPaused else {
+            lastCaptureBlockedMessages = []
+            return
+        }
+
         var blockedMessages = Set<String>()
 
         if snapshot.standardShortcutCount > 0 && !snapshot.carbonHotKeysRegistered {
