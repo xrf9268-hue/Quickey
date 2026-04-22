@@ -50,13 +50,21 @@ struct Logo_WinkTwin: View {
 
 /// Product app icon — Twin on a violet→blue gradient squircle. Used in
 /// the menu bar popover header, About card and dock icon (Phase 4).
+///
+/// Two overlays stacked on the gradient mirror the JSX source:
+/// 1. a faint white top-edge gradient that mimics CSS
+///    `inset 0 0.5px 0 rgba(255,255,255,0.35)` — gives the squircle the
+///    same lit-from-above feel as native macOS Sequoia app tiles, and
+/// 2. the Twin mark itself, rendered in white at 70% of the tile size.
 struct WinkAppIcon: View {
     var size: CGFloat = 28
     var cornerRadius: CGFloat?
 
     var body: some View {
         let radius = cornerRadius ?? size * 0.24
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+
+        shape
             .fill(
                 LinearGradient(
                     colors: [
@@ -67,6 +75,17 @@ struct WinkAppIcon: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+            )
+            .overlay(
+                // Inset top highlight — fades from a 35% white wash at the
+                // very top to clear by the vertical midpoint.
+                LinearGradient(
+                    colors: [.winkWhite(0.35), .clear],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+                .clipShape(shape)
+                .allowsHitTesting(false)
             )
             .overlay(
                 Logo_WinkTwin(size: size * 0.7, color: .white)

@@ -177,14 +177,23 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// Inject the palette derived from the surrounding `colorScheme` so children
-    /// can simply read `@Environment(\.winkPalette)`.
-    func winkPaletteFromColorScheme() -> some View {
-        modifier(WinkPaletteFromColorScheme())
+    /// Designate this view as the root of a Wink-styled hosting boundary.
+    ///
+    /// **Apply this once at the root of every Scene's content closure
+    /// and at every `NSHostingView` / `NSHostingController` rootView.**
+    /// SwiftUI's environment flows down a single view tree, but each new
+    /// hosting boundary starts a fresh tree — without this modifier, the
+    /// downstream `@Environment(\.winkPalette)` reads the default
+    /// (light) palette regardless of the surrounding `colorScheme`.
+    ///
+    /// Inside a single hosting tree, every child view inherits the
+    /// palette automatically; you do not need to repeat the modifier.
+    func winkChromeRoot() -> some View {
+        modifier(WinkChromeRoot())
     }
 }
 
-private struct WinkPaletteFromColorScheme: ViewModifier {
+private struct WinkChromeRoot: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {

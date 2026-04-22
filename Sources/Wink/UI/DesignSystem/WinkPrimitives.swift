@@ -72,7 +72,7 @@ struct WinkBanner<Trailing: View>: View {
         kind: WinkBannerKind,
         title: String,
         message: String? = nil,
-        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+        @ViewBuilder trailing: @escaping () -> Trailing
     ) {
         self.kind = kind
         self.title = title
@@ -80,7 +80,7 @@ struct WinkBanner<Trailing: View>: View {
         self.trailing = trailing
     }
 
-    private var palette_: (background: Color, foreground: Color, systemImage: String) {
+    private var style: (background: Color, foreground: Color, systemImage: String) {
         switch kind {
         case .success: return (palette.greenSoft,    palette.green, "checkmark.circle.fill")
         case .info:    return (palette.accentBgSoft, palette.accent, "info.circle.fill")
@@ -90,16 +90,16 @@ struct WinkBanner<Trailing: View>: View {
     }
 
     var body: some View {
-        let p = palette_
+        let s = style
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: p.systemImage)
+            Image(systemName: s.systemImage)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(p.foreground)
+                .foregroundStyle(s.foreground)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p.foreground)
+                    .foregroundStyle(s.foreground)
                 if let message, !message.isEmpty {
                     Text(message)
                         .font(.system(size: 11.5))
@@ -107,21 +107,24 @@ struct WinkBanner<Trailing: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if Trailing.self != EmptyView.self {
-                Spacer(minLength: 8)
-                trailing()
-            } else {
-                Spacer(minLength: 0)
-            }
+            Spacer(minLength: 8)
+            trailing()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(p.background)
+        .background(s.background)
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(p.foreground.opacity(0.2), lineWidth: 0.5)
+                .stroke(s.foreground.opacity(0.2), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// Convenience initializer for banners without a trailing accessory.
+extension WinkBanner where Trailing == EmptyView {
+    init(kind: WinkBannerKind, title: String, message: String? = nil) {
+        self.init(kind: kind, title: title, message: message) { EmptyView() }
     }
 }
 
@@ -216,49 +219,57 @@ struct WinkStatusDot: View {
 // MARK: - Switch
 
 /// A native-feeling toggle switch sized to the v2 spec. The standard
-/// SwiftUI `Toggle(.switch)` doesn't quite match the menu bar density, so
-/// we draw our own when the visual matters.
+/// SwiftUI `Toggle(.switch)` doesn't quite match the menu bar density,
+/// so we draw our own — but route accessibility through a real `Toggle`
+/// via `.accessibilityRepresentation` so VoiceOver announces the
+/// "switch, on/off" role and Space-bar still toggles.
 struct WinkSwitch: View {
     enum Size { case small, medium }
 
     @Environment(\.winkPalette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var isOn: Bool
     var size: Size = .medium
 
-    private var track: (width: CGFloat, height: CGFloat, knob: CGFloat) {
+    private var track: (width: CGFloat, height: CGFloat, knob: CGFloat, inset: CGFloat) {
         switch size {
-        case .small:  return (28, 16, 12)
-        case .medium: return (36, 22, 18)
+        case .small:  return (28, 16, 12, 2)
+        case .medium: return (36, 22, 18, 2)
         }
     }
 
-    private var trackOff: Color {
-        Color.winkSRGB(0xD4, 0xD4, 0xD4)
+    private var trackOffColor: Color {
+        colorScheme == .dark
+            ? .winkSRGB(0x48, 0x48, 0x4A)
+            : .winkSRGB(0xD4, 0xD4, 0xD4)
     }
-    private var trackOffDark: Color {
-        Color.winkSRGB(0x48, 0x48, 0x4A)
-    }
-
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let dims = track
+        let knobTravel = dims.width - dims.knob - (dims.inset * 2)
+
         Button(action: { isOn.toggle() }) {
-            ZStack(alignment: isOn ? .trailing : .leading) {
+            ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: dims.height / 2)
-                    .fill(isOn ? palette.accent : (colorScheme == .dark ? trackOffDark : trackOff))
+                    .fill(isOn ? palette.accent : trackOffColor)
                     .frame(width: dims.width, height: dims.height)
 
                 Circle()
                     .fill(Color.white)
                     .frame(width: dims.knob, height: dims.knob)
                     .shadow(color: .winkBlack(0.25), radius: 1, y: 1)
-                    .padding(.horizontal, 2)
+                    .padding(.leading, dims.inset)
+                    .offset(x: isOn ? knobTravel : 0)
             }
             .animation(.easeInOut(duration: 0.18), value: isOn)
             .contentShape(RoundedRectangle(cornerRadius: dims.height / 2))
         }
         .buttonStyle(.plain)
+        .accessibilityRepresentation {
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
     }
 }
 

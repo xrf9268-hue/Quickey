@@ -19,7 +19,7 @@ struct WinkApp: App {
             // Phase 2 replaces this with the real SettingsView.
             SettingsPlaceholderView()
                 .frame(minWidth: 480, minHeight: 320)
-                .winkPaletteFromColorScheme()
+                .winkChromeRoot()
         }
     }
 }
