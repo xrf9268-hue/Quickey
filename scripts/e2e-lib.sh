@@ -698,7 +698,7 @@ e2e_launch_app() {
     mkdir -p "$(dirname "$LOG_FILE")"
     : > "$LOG_FILE"
 
-    open "$APP_PATH"
+    open -a "$APP_PATH" --args --suppress-automatic-permission-prompts
 
     requirement=$(detect_capture_requirement "$SHORTCUTS_FILE" "$(hyper_key_enabled_flag)")
 

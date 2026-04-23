@@ -110,6 +110,42 @@ The macOS 15 SDK contract for `CGPreflightListenEventAccess()` / `CGRequestListe
 **Practical guidance**
 When investigating Hyper capture, trust the live runtime signals first: `CGPreflightListenEventAccess()`, the Wink Settings banner, `Event tap started`, and an actual Hyper end-to-end pass. Treat the System Settings pane as helpful but non-authoritative UI that may lag behind live access. Signature churn and launch-path mismatches still matter, so validate with `open Wink.app` and remember that rebuilding or re-signing can change the TCC identity that System Settings associates with the app.
 
+## Suppress Automatic Permission Prompts During E2E Harness Launches
+
+**Issue**
+Repeated packaged-app reruns during local runtime validation can stack duplicate macOS permission sheets if each cold start immediately calls the startup prompt path before the previous sheet is resolved.
+
+**Cause**
+The product's normal startup path may intentionally use the Accessibility/Input Monitoring prompt APIs, but the E2E harness is a rerun-heavy workflow. When a validation run fails for local TCC reasons and the operator relaunches repeatedly, each fresh launch can enqueue another system sheet instead of producing a clean fail-fast result.
+
+**Practical guidance**
+Keep normal product behavior unchanged, but let the repository E2E harness launch Wink with a dedicated `--suppress-automatic-permission-prompts` argument. In that mode, startup still checks live permission state, but it must not call the automatic prompt path; explicit user actions in Settings can still request access when needed. This keeps rerun-heavy validation from creating multiple overlapping system dialogs while preserving truthful readiness failures in the harness.
+
+## A Suppressed Harness Launch Can Still Fail Cleanly On TCC
+
+**Issue**
+After adding `--suppress-automatic-permission-prompts`, a freshly rebuilt packaged app may still start with `ax=false im=false carbon=false eventTap=false` and the harness may fail in startup readiness.
+
+**Cause**
+The launch argument only suppresses the automatic startup prompt path. It does not change TCC identity matching, and it does not grant permissions by itself. After an ad-hoc rebuild, the first rerun can fail cleanly because the current bundle no longer matches the previous TCC record.
+
+**Practical guidance**
+Do not treat that first clean failure as proof that the suppress flag is broken. Treat it as a better diagnostic result: the harness is reporting the local TCC blocker without piling on more permission sheets. Re-grant the exact current packaged bundle, then rerun the suite.
+
+## Duplicate Permission Sheets After Suppression Usually Mean Another Launch Path Exists
+
+**Issue**
+You still see repeated macOS permission dialogs even though the E2E harness now launches Wink with `--suppress-automatic-permission-prompts`.
+
+**Cause**
+Another launch path is still active. Typical causes are:
+- a second `Wink.app` copy launched from another worktree or path
+- a system-driven `Quit and Reopen` relaunch that reopened the wrong bundle
+- an explicit in-app permission request action, which should still be allowed to prompt
+
+**Practical guidance**
+When repeated permission sheets still appear, do not immediately remove the suppression behavior. First verify the running executable path with `pgrep -fal`, inspect the debug log for multiple `Wink starting` lines, and confirm whether the prompt came from an explicit permission request rather than the startup path. Fix the duplicate launch path or wrong bundle relaunch first, then rerun validation.
+
 ## Ad-hoc Signing and TCC
 
 **Issue**

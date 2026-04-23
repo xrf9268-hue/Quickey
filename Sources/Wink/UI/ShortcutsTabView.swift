@@ -321,7 +321,7 @@ struct ShortcutsTabView: View {
         case let .warning(title, message, showsAction):
             WinkBanner(kind: .warn, title: title, message: message) {
                 if showsAction {
-                    WinkButton("Open Settings", variant: .primary) {
+                    WinkButton(permissionActionTitle, variant: .primary) {
                         preferences.requestShortcutPermissions()
                     }
                 } else {
@@ -331,6 +331,17 @@ struct ShortcutsTabView: View {
                 }
             }
         }
+    }
+
+    private var permissionActionTitle: String {
+        let status = preferences.shortcutCaptureStatus
+        if !status.accessibilityGranted {
+            return "Request Accessibility"
+        }
+        if status.inputMonitoringRequired && !status.inputMonitoringGranted && !status.hyperShortcutsReady {
+            return "Request Input Monitoring"
+        }
+        return "Request Access"
     }
 
     @ViewBuilder

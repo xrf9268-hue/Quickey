@@ -39,6 +39,7 @@ final class AppController {
         appSwitcher: appSwitcher,
         usageTracker: usageTracker,
         appBundleLocator: appBundleLocator,
+        automaticPermissionPromptingEnabled: ShortcutManager.defaultAutomaticPermissionPromptingEnabled(),
         diagnosticClient: .live
     )
     private lazy var appPreferences = AppPreferences(
