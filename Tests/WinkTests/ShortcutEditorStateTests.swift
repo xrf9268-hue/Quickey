@@ -40,6 +40,39 @@ func savingShortcutChangesInvokesConfigurationChangeHandler() {
 }
 
 @Test @MainActor
+func editorSynchronizesWhenShortcutStoreChangesExternally() async {
+    let context = makeEditorContext()
+    defer { context.harness.cleanup() }
+
+    let safari = AppShortcut(
+        appName: "Safari",
+        bundleIdentifier: "com.apple.Safari",
+        keyEquivalent: "s",
+        modifierFlags: ["command", "shift"]
+    )
+
+    context.shortcutStore.replaceAll(with: [safari])
+
+    await waitUntil("editor syncs loaded shortcuts from store") {
+        context.editor.shortcuts.map(\.id) == [safari.id]
+    }
+
+    #expect(context.editor.shortcuts.map(\.id) == [safari.id])
+    #expect(context.editor.allEnabled == true)
+
+    var disabledSafari = safari
+    disabledSafari.isEnabled = false
+    context.shortcutStore.replaceAll(with: [disabledSafari])
+
+    await waitUntil("editor syncs enabled state from store") {
+        context.editor.shortcuts.first?.isEnabled == false
+    }
+
+    #expect(context.editor.shortcuts.first?.isEnabled == false)
+    #expect(context.editor.allEnabled == false)
+}
+
+@Test @MainActor
 func movingShortcutPersistsOrderAndInvokesConfigurationChangeHandler() throws {
     let shortcutStore = ShortcutStore()
     let safari = AppShortcut(
@@ -464,6 +497,24 @@ private final class ImportScanRecorder: @unchecked Sendable {
 
     init(now: Date) {
         self.now = now
+    }
+}
+
+@MainActor
+private func waitUntil(
+    _ description: String,
+    timeout: Duration = .seconds(2),
+    pollInterval: Duration = .milliseconds(20),
+    condition: @escaping @MainActor () -> Bool
+) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while !condition() {
+        if clock.now >= deadline {
+            Issue.record("Timed out waiting for: \(description)")
+            return
+        }
+        try? await Task.sleep(for: pollInterval)
     }
 }
 

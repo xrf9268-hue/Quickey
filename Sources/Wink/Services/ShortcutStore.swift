@@ -1,6 +1,8 @@
 import Foundation
+import Observation
 
 @MainActor
+@Observable
 final class ShortcutStore {
     private(set) var shortcuts: [AppShortcut] = []
 

@@ -108,6 +108,7 @@ final class ShortcutEditorState {
         self.appBundleLocator = appBundleLocator
         self.onShortcutConfigurationChange = onShortcutConfigurationChange
         self.shortcuts = shortcutStore.shortcuts
+        observeShortcutStore()
         Task { await refreshUsageCounts() }
     }
 
@@ -292,6 +293,24 @@ final class ShortcutEditorState {
     func refreshUsageCounts() async {
         guard let usageTracker else { return }
         usageCounts = await usageTracker.usageCounts(days: 7)
+    }
+
+    private func observeShortcutStore() {
+        withObservationTracking {
+            _ = shortcutStore.shortcuts
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                let latestShortcuts = self.shortcutStore.shortcuts
+                if self.shortcuts != latestShortcuts {
+                    self.shortcuts = latestShortcuts
+                    await self.refreshUsageCounts()
+                }
+
+                self.observeShortcutStore()
+            }
+        }
     }
 
     private func resetDraft() {
