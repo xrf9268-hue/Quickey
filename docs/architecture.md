@@ -92,8 +92,9 @@ Responsibilities:
 - `ShortcutStatusProvider`
 
 Responsibilities:
-- host `MenuBarExtra("Wink", systemImage: "bolt.square.fill", isInserted: ...)` with `.menuBarExtraStyle(.window)`
-- show the v2 popover shell (wordmark, version, Ready/Paused pill, placeholder search, Today histogram, shortcut rows, action rows)
+- host `MenuBarExtra(.window)` with the generated Wink Twin menu bar template image instead of the older SF Symbol shell
+- load the menu bar image from packaged PNG resources that preserve template semantics for light/dark menu bar rendering
+- show the v2 popover shell (wordmark, version, Ready/Paused pill, real search filter, Today hourly histogram, shortcut rows, action rows)
 - reuse `ShortcutStore` and `ShortcutStatusProvider` so the popover reflects saved ordering plus running/unavailable state
 - route `Manage…` to `Settings > Shortcuts`, `Settings…` to the shared Settings bridge, `Check for Updates…` to Sparkle, and `Quit Wink` to app termination
 - keep `Pause all shortcuts` wired to the real shortcut-capture runtime instead of a UI-only placeholder
@@ -208,8 +209,9 @@ Responsibilities:
 - `UsageTracker`
 
 Responsibilities:
-- record shortcut activations with SQLite daily aggregation
-- provide usage counts per shortcut for Insights UI
+- record shortcut activations with SQLite daily and hourly aggregation using fixed Gregorian `yyyy-MM-dd` buckets
+- provide current-window counts, previous-period totals, streaks, and hourly heatmap buckets for Insights and the menu bar Today view
+- reset a legacy usage database shape explicitly before startup opens the live database, instead of keeping a half-migrated schema around
 - run off the main actor via Swift actor isolation
 
 ### Permissions and packaging
@@ -218,6 +220,7 @@ Responsibilities:
 - `UpdateServicing`
 - `SparkleUpdateService`
 - `ShortcutCaptureStatus`
+- `scripts/build-app-icon.sh`
 - `scripts/package-app.sh`
 - `scripts/package-update-zip.sh`
 - `scripts/generate-appcast.sh`
@@ -235,6 +238,7 @@ Responsibilities:
 - keep signed-feed defaults (`SURequireSignedFeed` + `SUVerifyUpdateBeforeExtraction`) in `Info.plist`
 - distinguish `SMAppService.Status.notFound` caused by install location from a real bundle-configuration miss before surfacing launch-at-login guidance
 - provide LSUIElement app bundle scaffold
+- regenerate `AppIcon.icns` and the menu bar template PNGs from the SVG sources for Dock, menu bar, and packaged-app consistency
 - embed and re-sign `Sparkle.framework` for packaged builds, removing unused XPC services because Wink is not sandboxed
 - automate `.app`, Sparkle update zip, and signed appcast packaging via scripts
 

@@ -13,27 +13,18 @@ struct InsightsTabView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Insights")
-                            .font(WinkType.tabTitle)
-                            .foregroundStyle(palette.textPrimary)
-                        Text("Usage trends for your saved shortcuts.")
-                            .font(WinkType.bodyText)
-                            .foregroundStyle(palette.textSecondary)
-                    }
+                header
 
-                    Spacer(minLength: 8)
+                InsightsUnusedNudge(appNames: viewModel.unusedShortcutNames)
 
-                    Picker("", selection: $viewModel.period) {
-                        ForEach(InsightsPeriod.allCases, id: \.self) { period in
-                            Text(period.rawValue).tag(period)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 120)
-                    .labelsHidden()
-                }
+                InsightsKpiSection(
+                    totalCount: viewModel.totalCount,
+                    previousPeriodTotal: viewModel.previousPeriodTotal,
+                    currentStreakDays: viewModel.currentStreakDays,
+                    sparklinePoints: viewModel.activationSparklinePoints
+                )
+
+                InsightsHourlyHeatmap(buckets: viewModel.heatmapBuckets)
 
                 WinkCard(
                     title: {
@@ -45,7 +36,7 @@ struct InsightsTabView: View {
                             .foregroundStyle(palette.textTertiary)
                     }
                 ) {
-                    if viewModel.ranking.isEmpty {
+                    if viewModel.appRows.isEmpty {
                         Text(InsightsTabCopy.emptyRankingText)
                             .font(WinkType.bodyText)
                             .foregroundStyle(palette.textSecondary)
@@ -53,14 +44,11 @@ struct InsightsTabView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 18)
                     } else {
-                        let maxCount = max(viewModel.ranking.map(\.count).max() ?? 0, 1)
-
                         VStack(spacing: 0) {
-                            ForEach(Array(viewModel.ranking.enumerated()), id: \.element.id) { index, item in
-                                InsightsRankingRow(
+                            ForEach(Array(viewModel.appRows.enumerated()), id: \.element.id) { index, item in
+                                InsightsAppRow(
                                     item: item,
-                                    maxCount: maxCount,
-                                    showsDivider: index < viewModel.ranking.count - 1
+                                    showsDivider: index < viewModel.appRows.count - 1
                                 )
                             }
                         }
@@ -72,57 +60,28 @@ struct InsightsTabView: View {
         }
         .background(palette.windowBg)
     }
-}
 
-private struct InsightsRankingRow: View {
-    @Environment(\.winkPalette) private var palette
-
-    let item: RankedShortcut
-    let maxCount: Int
-    let showsDivider: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                AppIconView(bundleIdentifier: item.bundleIdentifier, size: 30)
-
-                Text(item.appName)
-                    .font(WinkType.bodyMedium)
+    private var header: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Insights")
+                    .font(WinkType.tabTitle)
                     .foregroundStyle(palette.textPrimary)
-                    .lineLimit(1)
-                    .frame(minWidth: 110, alignment: .leading)
-
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(palette.accentBgSoft)
-
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(palette.accent)
-                            .frame(width: filledWidth(totalWidth: geometry.size.width))
-                    }
-                }
-                .frame(height: 12)
-
-                Text(item.count.formatted(.number.grouping(.automatic)))
-                    .font(WinkType.monoBadge)
+                Text("Usage trends for your saved shortcuts.")
+                    .font(WinkType.bodyText)
                     .foregroundStyle(palette.textSecondary)
-                    .frame(minWidth: 48, alignment: .trailing)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
 
-            if showsDivider {
-                Divider()
-                    .overlay(palette.hairline)
-                    .padding(.leading, 56)
+            Spacer(minLength: 8)
+
+            Picker("", selection: $viewModel.period) {
+                ForEach(InsightsPeriod.allCases, id: \.self) { period in
+                    Text(period.rawValue).tag(period)
+                }
             }
+            .pickerStyle(.segmented)
+            .frame(width: 120)
+            .labelsHidden()
         }
-    }
-
-    private func filledWidth(totalWidth: CGFloat) -> CGFloat {
-        guard maxCount > 0 else { return 0 }
-        let progress = max(CGFloat(item.count) / CGFloat(maxCount), 0)
-        return max(totalWidth * progress, min(32, totalWidth))
     }
 }

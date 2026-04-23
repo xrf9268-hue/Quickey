@@ -311,6 +311,32 @@ private actor StaticUsageTracker: UsageTracking {
     func totalSwitches(days: Int, relativeTo now: Date) async -> Int {
         total
     }
+
+    func hourlyCounts(days: Int, relativeTo now: Date) async -> [HourlyUsageBucket] {
+        let date = "2026-04-22"
+        let baseCount = total / 24
+        let remainder = total % 24
+
+        return (0..<24).map { hour in
+            HourlyUsageBucket(
+                date: date,
+                hour: hour,
+                count: baseCount + (hour < remainder ? 1 : 0)
+            )
+        }
+    }
+
+    func previousPeriodTotal(days: Int, relativeTo now: Date) async -> Int {
+        0
+    }
+
+    func streakDays(relativeTo now: Date) async -> Int {
+        0
+    }
+
+    func usageTimeZone() async -> TimeZone {
+        .current
+    }
 }
 
 private struct FakePermissionService: PermissionServicing {

@@ -9,7 +9,7 @@ struct MenuBarSceneTests {
         let descriptor = WinkMenuBarScene<EmptyView>.descriptor(isInserted: true)
 
         #expect(descriptor.title == "Wink")
-        #expect(descriptor.systemImage == "bolt.square.fill")
+        #expect(descriptor.imageName == "MenuBarTemplate")
         #expect(descriptor.usesWindowStyle == true)
     }
 
