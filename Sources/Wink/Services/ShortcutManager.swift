@@ -4,9 +4,18 @@ import UserNotifications
 import os.log
 
 private let logger = Logger(subsystem: DiagnosticLog.subsystem, category: "ShortcutManager")
+private let shortcutManagerSuppressAutomaticPermissionPromptsArgument = "--suppress-automatic-permission-prompts"
+
+private func shortcutManagerAutomaticPermissionPromptingEnabled(
+    processInfo: ProcessInfo = .processInfo
+) -> Bool {
+    !processInfo.arguments.contains(shortcutManagerSuppressAutomaticPermissionPromptsArgument)
+}
 
 @MainActor
 final class ShortcutManager {
+    static let suppressAutomaticPermissionPromptsArgument = shortcutManagerSuppressAutomaticPermissionPromptsArgument
+
     struct DiagnosticClient {
         let log: @Sendable (String) -> Void
     }
@@ -19,6 +28,7 @@ final class ShortcutManager {
     private let usageTracker: UsageTracker?
     private let appBundleLocator: AppBundleLocator
     private let diagnosticClient: DiagnosticClient
+    private let automaticPermissionPromptingEnabled: Bool
     private let keyMatcher = KeyMatcher()
     private var triggerIndex: [ShortcutTrigger: AppShortcut] = [:]
     private var permissionTimer: Timer?
@@ -38,6 +48,7 @@ final class ShortcutManager {
         permissionService: any PermissionServicing = AccessibilityPermissionService(),
         usageTracker: UsageTracker? = nil,
         appBundleLocator: AppBundleLocator = AppBundleLocator(),
+        automaticPermissionPromptingEnabled: Bool = shortcutManagerAutomaticPermissionPromptingEnabled(),
         diagnosticClient: DiagnosticClient
     ) {
         self.shortcutStore = shortcutStore
@@ -48,6 +59,7 @@ final class ShortcutManager {
         self.usageTracker = usageTracker
         self.appBundleLocator = appBundleLocator
         self.diagnosticClient = diagnosticClient
+        self.automaticPermissionPromptingEnabled = automaticPermissionPromptingEnabled
     }
 
     func start() {
@@ -60,9 +72,12 @@ final class ShortcutManager {
             let shouldRequestInputMonitoring = inputMonitoringRequired
                 && permissionService.isAccessibilityTrusted()
             ready = permissionService.requestIfNeeded(
-                prompt: true,
+                prompt: automaticPermissionPromptingEnabled,
                 inputMonitoringRequired: shouldRequestInputMonitoring
             )
+        }
+        if !automaticPermissionPromptingEnabled {
+            diagnosticClient.log("Automatic permission prompts suppressed for this launch")
         }
         logger.info(
             "start(): ready=\(ready), ax=\(self.permissionService.isAccessibilityTrusted()), im=\(self.permissionService.isInputMonitoringTrusted()), inputMonitoringRequired=\(inputMonitoringRequired), paused=\(self.shortcutsPaused)"
@@ -144,7 +159,7 @@ final class ShortcutManager {
         let shouldRequestInputMonitoring = captureCoordinator.inputMonitoringRequired
             && permissionService.isAccessibilityTrusted()
         _ = permissionService.requestIfNeeded(
-            prompt: true,
+            prompt: automaticPermissionPromptingEnabled,
             inputMonitoringRequired: shouldRequestInputMonitoring
         )
         attemptStartIfPermitted()
@@ -238,7 +253,7 @@ final class ShortcutManager {
             && !imGranted
         {
             _ = permissionService.requestIfNeeded(
-                prompt: true,
+                prompt: automaticPermissionPromptingEnabled,
                 inputMonitoringRequired: true
             )
             let refreshedInputMonitoring = permissionService.isInputMonitoringTrusted()
@@ -337,7 +352,7 @@ final class ShortcutManager {
             && permissionService.isAccessibilityTrusted()
         {
             _ = permissionService.requestIfNeeded(
-                prompt: true,
+                prompt: automaticPermissionPromptingEnabled,
                 inputMonitoringRequired: true
             )
         }
@@ -475,6 +490,12 @@ final class ShortcutManager {
 
     private func quoted(_ value: String) -> String {
         "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
+    }
+
+    static func defaultAutomaticPermissionPromptingEnabled(
+        processInfo: ProcessInfo = .processInfo
+    ) -> Bool {
+        shortcutManagerAutomaticPermissionPromptingEnabled(processInfo: processInfo)
     }
 }
 

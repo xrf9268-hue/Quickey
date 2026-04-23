@@ -133,6 +133,27 @@ LOG
   [ "$status" -eq 0 ]
 }
 
+@test "e2e_launch_app suppresses automatic permission prompts for validation launches" {
+  local app_dir="$BATS_TEST_TMPDIR/Wink.app"
+  local log_file="$BATS_TEST_TMPDIR/debug.log"
+  mkdir -p "$app_dir"
+
+  run bash -lc "
+    export E2E_APP_PATH='$app_dir'
+    export E2E_LOG_FILE='$log_file'
+    source '$BATS_TEST_DIRNAME/e2e-lib.sh'
+    pkill() { :; }
+    open() { printf '%s\n' \"\$*\"; }
+    detect_capture_requirement() { echo none; }
+    wait_for_capture_requirement() { return 0; }
+    hyper_key_enabled_flag() { echo 0; }
+    e2e_launch_app
+  "
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"-a $app_dir --args --suppress-automatic-permission-prompts"* ]]
+}
+
 @test "bundle_has_configured_shortcut matches a configured standard shortcut" {
   local shortcuts="$BATS_TEST_TMPDIR/shortcuts.json"
   cat >"$shortcuts" <<'JSON'
