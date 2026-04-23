@@ -24,7 +24,7 @@ struct WinkApp: App {
                     quit: menuBarServices.quit
                 )
             )
-            .frame(width: 356)
+            .frame(width: 356, height: 680)
             .winkChromeRoot()
         }
 

@@ -75,6 +75,8 @@ struct InsightsHourlyHeatmap: View {
                             Text("\(hour)")
                                 .font(WinkType.labelSmall)
                                 .foregroundStyle(palette.textTertiary)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                                 .frame(width: 12, alignment: .leading)
                         } else {
                             Color.clear.frame(width: 12)
