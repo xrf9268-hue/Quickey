@@ -66,8 +66,14 @@ struct ShortcutsListRowPresentation {
             lastUsedText = "Last used —"
         }
 
+        // `usageCount` only covers the past 7 days, but `lastUsed` reflects all stored
+        // hourly history. A shortcut triggered more than a week ago therefore has
+        // count == 0 while still carrying a real last-used bucket, so only fall back
+        // to "Not used yet" when we truly have no history to report.
         if usageCount > 0 {
             metadataText = "\(usageSummary) · \(lastUsedText)"
+        } else if lastUsed != nil {
+            metadataText = lastUsedText
         } else {
             metadataText = "Not used yet"
         }

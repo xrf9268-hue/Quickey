@@ -103,6 +103,32 @@ struct LayoutRegressionTests {
     }
 
     @Test @MainActor
+    func shortcutsListRowPresentationShowsHistoricalLastUsedWhenSevenDayCountIsZero() {
+        // Shortcut triggered more than 7 days ago: usageCount drops to 0 but the
+        // hourly history still carries a timestamp. We should surface the historical
+        // last-used rather than falsely claiming the shortcut was never used.
+        let shortcut = AppShortcut(
+            appName: "Zed",
+            bundleIdentifier: "dev.zed.Zed",
+            keyEquivalent: "z",
+            modifierFlags: ["command", "option", "shift", "control"]
+        )
+        let now = Date()
+        let tenDaysAgo = now.addingTimeInterval(-10 * 24 * 60 * 60)
+        let presentation = ShortcutsListRowPresentation(
+            shortcut: shortcut,
+            usageCount: 0,
+            runtimeStatus: ShortcutRuntimeStatus(isRunning: false, isUnavailable: false),
+            lastUsed: tenDaysAgo,
+            now: now
+        )
+
+        #expect(presentation.metadataText != "Not used yet")
+        #expect(presentation.metadataText.hasPrefix("Last used "))
+        #expect(!presentation.metadataText.contains("past 7 days"))
+    }
+
+    @Test @MainActor
     func shortcutsListRowPresentationRendersRelativeLastUsedWhenDateIsProvided() {
         let shortcut = AppShortcut(
             appName: "Terminal",
