@@ -1,0 +1,50 @@
+{
+  "app_name": "Wink",
+  "app_path": "/Users/yvan/developer/Wink/build/Wink.app",
+  "app_exists": true,
+  "bundle_id": "com.wink.app",
+  "defaults_domain": "com.wink.app",
+  "hyper_enabled": true,
+  "expected_transport": "mixed",
+  "shortcuts": {
+    "path": "/Users/yvan/Library/Application Support/Wink/shortcuts.json",
+    "exists": true,
+    "total": 4,
+    "enabled": 4,
+    "disabled": 0,
+    "standard_enabled": 3,
+    "hyper_enabled_shortcuts": 1,
+    "parse_error": null
+  },
+  "log": {
+    "path": "/Users/yvan/.config/Wink/debug.log",
+    "exists": true,
+    "line": "2026-04-24T09:03:21Z attemptStart: shortcuts=2 triggerIndex=2 carbon=true eventTap=true",
+    "state": {
+      "carbon": true,
+      "eventTap": true,
+      "shortcuts": 2
+    },
+    "timestamp": "2026-04-24T09:03:21Z",
+    "recent_state_lines": [
+      "2026-04-24T09:03:21Z attemptStart: shortcuts=2 triggerIndex=2 carbon=true eventTap=true",
+      "2026-04-24T09:03:21Z attemptStart: shortcuts=2 triggerIndex=2 carbon=true eventTap=true",
+      "2026-04-24T09:03:21Z start(): ready=true, ax=true, im=true, inputMonitoringRequired=true, paused=false",
+      "2026-04-24T09:03:21Z attemptStart: shortcuts=2 triggerIndex=2 carbon=true eventTap=true",
+      "2026-04-24T09:03:21Z start(): ready=true, ax=true, im=true, inputMonitoringRequired=true, paused=false",
+      "2026-04-24T09:03:20Z checkPermission: ax=false im=false carbon=false eventTap=true",
+      "2026-04-24T02:04:14Z checkPermission: ax=false im=false carbon=false eventTap=false",
+      "2026-04-24T02:04:11Z checkPermission: ax=false im=false carbon=false eventTap=false",
+      "2026-04-24T02:04:08Z checkPermission: ax=false im=false carbon=false eventTap=false",
+      "2026-04-24T02:04:05Z checkPermission: ax=false im=false carbon=false eventTap=false",
+      "2026-04-24T02:04:02Z checkPermission: ax=false im=false carbon=false eventTap=false",
+      "2026-04-24T02:03:59Z checkPermission: ax=false im=false carbon=false eventTap=false"
+    ]
+  },
+  "readiness_verdict": "not-ready",
+  "notes": [],
+  "readiness_notes": [
+    "Accessibility is not ready",
+    "Input Monitoring is not ready"
+  ]
+}
