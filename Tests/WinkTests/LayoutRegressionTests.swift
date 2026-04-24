@@ -71,6 +71,8 @@ struct LayoutRegressionTests {
 
         #expect(presentation.title == "Missing App")
         #expect(presentation.subtitle == "732× past 7 days")
+        // usageCount > 0 but lastUsed is nil: show the em-dash placeholder so the
+        // user still sees the "past 7 days" counter rather than a misleading "—".
         #expect(presentation.metadataText == "732× past 7 days · Last used —")
         #expect(presentation.contentOpacity == 1.0)
         #expect(presentation.showsRunningIndicator == false)
@@ -81,6 +83,72 @@ struct LayoutRegressionTests {
         #expect(presentation.subtitle != "com.example.MissingApp")
         #expect(presentation.unavailableStatusText != "com.example.MissingApp")
         #expect(presentation.unavailableHelpText != "com.example.MissingApp")
+    }
+
+    @Test @MainActor
+    func shortcutsListRowPresentationRendersNotUsedYetWhenUsageCountIsZero() {
+        let shortcut = AppShortcut(
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            keyEquivalent: "n",
+            modifierFlags: ["command", "option"]
+        )
+        let presentation = ShortcutsListRowPresentation(
+            shortcut: shortcut,
+            usageCount: 0,
+            runtimeStatus: ShortcutRuntimeStatus(isRunning: false, isUnavailable: false)
+        )
+
+        #expect(presentation.metadataText == "Not used yet")
+    }
+
+    @Test @MainActor
+    func shortcutsListRowPresentationShowsHistoricalLastUsedWhenSevenDayCountIsZero() {
+        // Shortcut triggered more than 7 days ago: usageCount drops to 0 but the
+        // hourly history still carries a timestamp. We should surface the historical
+        // last-used rather than falsely claiming the shortcut was never used.
+        let shortcut = AppShortcut(
+            appName: "Zed",
+            bundleIdentifier: "dev.zed.Zed",
+            keyEquivalent: "z",
+            modifierFlags: ["command", "option", "shift", "control"]
+        )
+        let now = Date()
+        let tenDaysAgo = now.addingTimeInterval(-10 * 24 * 60 * 60)
+        let presentation = ShortcutsListRowPresentation(
+            shortcut: shortcut,
+            usageCount: 0,
+            runtimeStatus: ShortcutRuntimeStatus(isRunning: false, isUnavailable: false),
+            lastUsed: tenDaysAgo,
+            now: now
+        )
+
+        #expect(presentation.metadataText != "Not used yet")
+        #expect(presentation.metadataText.hasPrefix("Last used "))
+        #expect(!presentation.metadataText.contains("past 7 days"))
+    }
+
+    @Test @MainActor
+    func shortcutsListRowPresentationRendersRelativeLastUsedWhenDateIsProvided() {
+        let shortcut = AppShortcut(
+            appName: "Terminal",
+            bundleIdentifier: "com.apple.Terminal",
+            keyEquivalent: "t",
+            modifierFlags: ["command", "option"]
+        )
+        let now = Date()
+        let twoHoursAgo = now.addingTimeInterval(-2 * 60 * 60)
+        let presentation = ShortcutsListRowPresentation(
+            shortcut: shortcut,
+            usageCount: 32,
+            runtimeStatus: ShortcutRuntimeStatus(isRunning: false, isUnavailable: false),
+            lastUsed: twoHoursAgo,
+            now: now
+        )
+
+        #expect(presentation.metadataText.hasPrefix("32× past 7 days · Last used "))
+        #expect(presentation.metadataText != "32× past 7 days · Last used —")
+        #expect(presentation.lastUsedText != "Last used —")
     }
 
     @Test @MainActor

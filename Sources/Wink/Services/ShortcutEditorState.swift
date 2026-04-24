@@ -78,6 +78,7 @@ final class ShortcutEditorState {
     var recipeFeedback: RecipeFeedback?
     var pendingRecipeImport: WinkRecipeImportPlanner.ImportPlan?
     var usageCounts: [UUID: Int] = [:]
+    var lastUsed: [UUID: Date] = [:]
 
     private let shortcutStore: ShortcutStore
     private let shortcutManager: ShortcutManager
@@ -160,6 +161,21 @@ final class ShortcutEditorState {
         shortcuts = updated
         shortcutManager.save(shortcuts: updated)
         onShortcutConfigurationChange()
+    }
+
+    /// Moves the shortcut identified by `id` so that it occupies the slot currently
+    /// held by `target`. Used by drag-to-reorder in the Shortcuts tab, where drops
+    /// are resolved against the row under the cursor rather than an index between rows.
+    func reorderShortcut(draggedID id: UUID, onto target: UUID) {
+        guard id != target,
+              let fromIndex = shortcuts.firstIndex(where: { $0.id == id }),
+              let toIndex = shortcuts.firstIndex(where: { $0.id == target }),
+              fromIndex != toIndex else {
+            return
+        }
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        moveShortcut(from: IndexSet([fromIndex]), to: destination)
     }
 
     var allEnabled: Bool {
@@ -292,7 +308,10 @@ final class ShortcutEditorState {
 
     func refreshUsageCounts() async {
         guard let usageTracker else { return }
-        usageCounts = await usageTracker.usageCounts(days: 7)
+        async let counts = usageTracker.usageCounts(days: 7)
+        async let lastUsedMap = usageTracker.lastUsedPerShortcut()
+        usageCounts = await counts
+        lastUsed = await lastUsedMap
     }
 
     private func observeShortcutStore() {

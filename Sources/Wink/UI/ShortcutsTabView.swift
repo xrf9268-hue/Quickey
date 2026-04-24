@@ -32,21 +32,52 @@ struct ShortcutsListRowPresentation {
     let title: String
     let usageText: String
     let lastUsedText: String
+    let metadataText: String
     let contentOpacity: Double
     let showsRunningIndicator: Bool
     let runningStatusText: String?
     let unavailableStatusText: String?
     let unavailableHelpText: String?
 
+    // `RelativeDateTimeFormatter` is non-Sendable; create a fresh instance per call
+    // rather than caching in a static property (Swift 6 strict concurrency).
+    private static func makeRelativeFormatter() -> RelativeDateTimeFormatter {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }
+
     init(
         shortcut: AppShortcut,
         usageCount: Int,
         runtimeStatus: ShortcutRuntimeStatus,
-        accessibilityOptions: ShortcutRowAccessibilityOptions = .standard
+        accessibilityOptions: ShortcutRowAccessibilityOptions = .standard,
+        lastUsed: Date? = nil,
+        now: Date = Date()
     ) {
         title = shortcut.appName
-        usageText = "\(usageCount)× past 7 days"
-        lastUsedText = "Last used —"
+        let usageSummary = "\(usageCount)× past 7 days"
+        usageText = usageSummary
+
+        if let lastUsed {
+            let relative = Self.makeRelativeFormatter().localizedString(for: lastUsed, relativeTo: now)
+            lastUsedText = "Last used \(relative)"
+        } else {
+            lastUsedText = "Last used —"
+        }
+
+        // `usageCount` only covers the past 7 days, but `lastUsed` reflects all stored
+        // hourly history. A shortcut triggered more than a week ago therefore has
+        // count == 0 while still carrying a real last-used bucket, so only fall back
+        // to "Not used yet" when we truly have no history to report.
+        if usageCount > 0 {
+            metadataText = "\(usageSummary) · \(lastUsedText)"
+        } else if lastUsed != nil {
+            metadataText = lastUsedText
+        } else {
+            metadataText = "Not used yet"
+        }
+
         contentOpacity = shortcut.isEnabled ? 1.0 : 0.65
         showsRunningIndicator = runtimeStatus.isRunning
         runningStatusText = runtimeStatus.isRunning && accessibilityOptions.differentiateWithoutColor
@@ -56,10 +87,6 @@ struct ShortcutsListRowPresentation {
         unavailableHelpText = runtimeStatus.isUnavailable
             ? "Couldn't find this app. Rebind it to restore the shortcut."
             : nil
-    }
-
-    var metadataText: String {
-        "\(usageText) · \(lastUsedText)"
     }
 
     var subtitle: String {
@@ -346,6 +373,8 @@ struct ShortcutsTabView: View {
 
     @ViewBuilder
     private func shortcutsCard(importPreviewActive: Bool) -> some View {
+        let canReorder = filterText.isEmpty && !importPreviewActive
+
         WinkCard(
             title: {
                 Text("Your Shortcuts · \(editor.shortcuts.count)")
@@ -360,18 +389,33 @@ struct ShortcutsTabView: View {
                                 .foregroundStyle(palette.textTertiary)
                         }
                     )
-                    .frame(width: 150)
+                    .frame(width: 140)
 
-                    WinkButton("Export…") {
-                        editor.exportRecipes()
-                    }
-                    .disabled(importPreviewActive)
-
-                    WinkButton("Import…") {
-                        Task {
-                            await editor.importRecipes(using: appListProvider)
+                    Menu {
+                        Button("Import…") {
+                            Task {
+                                await editor.importRecipes(using: appListProvider)
+                            }
                         }
+                        Button("Export…") {
+                            editor.exportRecipes()
+                        }
+                        .disabled(editor.shortcuts.isEmpty)
+                    } label: {
+                        WinkIcon.more.image(size: 12)
+                            .foregroundStyle(palette.textSecondary)
+                            .frame(width: 28, height: 24)
+                            .background(palette.controlBg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(palette.controlBorder, lineWidth: 0.5)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Import or export shortcuts")
                     .disabled(importPreviewActive)
                 }
             }
@@ -383,22 +427,10 @@ struct ShortcutsTabView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 18)
-            } else if filterText.isEmpty {
-                List {
-                    ForEach(Array(editor.shortcuts.enumerated()), id: \.element.id) { index, shortcut in
-                        shortcutRow(shortcut, index: index)
-                            .moveDisabled(importPreviewActive)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                    }
-                    .onMove(perform: editor.moveShortcut)
-                }
-                .listStyle(.plain)
-                .frame(minHeight: 180)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(filteredShortcuts.enumerated()), id: \.element.id) { index, shortcut in
-                        shortcutRow(shortcut, index: index)
+                        reorderableRow(shortcut, index: index, canReorder: canReorder)
                         if index < filteredShortcuts.count - 1 {
                             Divider().overlay(palette.hairline)
                                 .padding(.leading, 58)
@@ -406,6 +438,27 @@ struct ShortcutsTabView: View {
                     }
                 }
             }
+        }
+    }
+
+    // Drag-to-reorder lives on the row via `.draggable` + `.dropDestination`. We gate
+    // it on `canReorder` so filtering or an active import preview cannot produce a
+    // silently-wrong reorder against the full shortcut list.
+    @ViewBuilder
+    private func reorderableRow(_ shortcut: AppShortcut, index: Int, canReorder: Bool) -> some View {
+        if canReorder {
+            shortcutRow(shortcut, index: index)
+                .draggable(shortcut.id.uuidString)
+                .dropDestination(for: String.self) { items, _ in
+                    guard let idString = items.first,
+                          let draggedID = UUID(uuidString: idString) else {
+                        return false
+                    }
+                    editor.reorderShortcut(draggedID: draggedID, onto: shortcut.id)
+                    return true
+                }
+        } else {
+            shortcutRow(shortcut, index: index)
         }
     }
 
@@ -417,6 +470,7 @@ struct ShortcutsTabView: View {
         ShortcutsListRow(
             shortcut: shortcut,
             usageCount: editor.usageCounts[shortcut.id, default: 0],
+            lastUsed: editor.lastUsed[shortcut.id],
             runtimeStatus: runtimeStatus,
             accessibilityOptions: accessibilityOptions,
             importPreviewActive: importPreviewActive,
@@ -517,6 +571,7 @@ struct ShortcutsListRow: View {
 
     let shortcut: AppShortcut
     let usageCount: Int
+    let lastUsed: Date?
     let runtimeStatus: ShortcutRuntimeStatus
     let accessibilityOptions: ShortcutRowAccessibilityOptions
     let importPreviewActive: Bool
@@ -529,7 +584,8 @@ struct ShortcutsListRow: View {
             shortcut: shortcut,
             usageCount: usageCount,
             runtimeStatus: runtimeStatus,
-            accessibilityOptions: accessibilityOptions
+            accessibilityOptions: accessibilityOptions,
+            lastUsed: lastUsed
         )
     }
 
@@ -596,6 +652,8 @@ struct ShortcutsListRow: View {
                 Text(presentation.metadataText)
                     .font(WinkType.labelSmall)
                     .foregroundStyle(palette.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 if let unavailableStatusText = presentation.unavailableStatusText {
                     Label(unavailableStatusText, systemImage: "exclamationmark.triangle.fill")
