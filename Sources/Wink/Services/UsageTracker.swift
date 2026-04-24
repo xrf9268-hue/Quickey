@@ -22,6 +22,7 @@ actor UsageTracker: UsageTracking {
     private nonisolated(unsafe) var hourlyCountsStmt: OpaquePointer?
     private nonisolated(unsafe) var previousPeriodTotalStmt: OpaquePointer?
     private nonisolated(unsafe) var streakDaysStmt: OpaquePointer?
+    private nonisolated(unsafe) var lastUsedPerShortcutStmt: OpaquePointer?
 
     init(
         timeZoneProvider: @escaping @Sendable () -> TimeZone = { TimeZone.current }
@@ -54,6 +55,7 @@ actor UsageTracker: UsageTracking {
             hourlyCountsStmt,
             previousPeriodTotalStmt,
             streakDaysStmt,
+            lastUsedPerShortcutStmt,
         ] {
             sqlite3_finalize(stmt)
         }
@@ -362,6 +364,55 @@ actor UsageTracker: UsageTracking {
 
     func usageTimeZone() async -> TimeZone {
         timeZoneProvider()
+    }
+
+    func lastUsedPerShortcut() async -> [UUID: Date] {
+        let sql = """
+            SELECT shortcut_id, date, hour
+            FROM (
+                SELECT shortcut_id, date, hour,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY shortcut_id
+                           ORDER BY date DESC, hour DESC
+                       ) AS rn
+                FROM usage_hourly
+            )
+            WHERE rn = 1
+            """
+        guard let stmt = cachedStatement(&lastUsedPerShortcutStmt, sql: sql) else {
+            return [:]
+        }
+
+        let tz = timeZoneProvider()
+        let calendar = UsageWindowMath.calendar(timeZone: tz)
+
+        if tz.identifier != dateFormatterTimeZoneIdentifier {
+            (dateFormatter, dateFormatterTimeZoneIdentifier) = Self.makeDateFormatter(for: tz)
+        }
+
+        var result: [UUID: Date] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard
+                let idPtr = sqlite3_column_text(stmt, 0),
+                let datePtr = sqlite3_column_text(stmt, 1),
+                let id = UUID(uuidString: String(cString: idPtr))
+            else {
+                continue
+            }
+
+            let dateString = String(cString: datePtr)
+            let hour = Int(sqlite3_column_int(stmt, 2))
+
+            guard let dayAtMidnight = dateFormatter.date(from: dateString),
+                  let bucketStart = calendar.date(byAdding: .hour, value: hour, to: dayAtMidnight)
+            else {
+                continue
+            }
+
+            result[id] = bucketStart
+        }
+
+        return result
     }
 
     private static func defaultDatabasePath() -> String {

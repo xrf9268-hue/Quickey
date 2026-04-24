@@ -38,6 +38,7 @@ protocol UsageTracking: Sendable {
     func previousPeriodTotal(days: Int, relativeTo now: Date) async -> Int
     func streakDays(relativeTo now: Date) async -> Int
     func usageTimeZone() async -> TimeZone
+    func lastUsedPerShortcut() async -> [UUID: Date]
 }
 
 extension UsageTracking {
@@ -63,5 +64,9 @@ extension UsageTracking {
 
     func streakDays() async -> Int {
         await streakDays(relativeTo: Date())
+    }
+
+    func lastUsedPerShortcut() async -> [UUID: Date] {
+        [:]
     }
 }
