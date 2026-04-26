@@ -249,7 +249,4 @@ Object.assign(window, {
   Logo_WinkDotI,
   Logo_WinkPair,
   Wordmark,
-  // Alias for backward compat with menubar/general chrome that references
-  // Logo_WinkCrescent — now points to the fixed Twin mark.
-  Logo_WinkCrescent: Logo_WinkTwin,
 });

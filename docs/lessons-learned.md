@@ -1,6 +1,6 @@
 # Wink Troubleshooting Guidance
 
-> **Last reviewed:** 2026-04-25 (issue #230 documentation audit). **Next audit due:** 2026-07-25.
+> **Last reviewed:** 2026-04-25 (issue #230 documentation audit). **Last updated:** 2026-04-26 (issue #184 DMG installer design update). **Next audit due:** 2026-07-25.
 >
 > This file accumulates operational lessons over time. Without periodic pruning it becomes another archive. When a section's lesson no longer reflects current code, move it to `archive/lessons-learned-historical.md` (create on first prune) rather than rewriting it in place — the original framing is part of the evidence.
 
@@ -127,6 +127,25 @@ For visual regressions, write the checklist at the start of the fix, before edit
 - import preview details own their internal scroller
 - row action menu exposes only `Delete Shortcut`
 - sidebar width matches the design target while the system sidebar toggle remains intentionally visible
+
+## DMG Mock Chrome Must Be Reconciled With Real Finder Chrome
+
+**Issue**
+An installer mock can include Finder-like chrome that reads well in the design file but does not necessarily belong in the shipped DMG. In issue #184, the editorial DMG mock showed an empty toolbar strip above the content, while the mounted package looked better and behaved more predictably with Finder's real toolbar hidden and no fake toolbar strip painted into the background.
+
+**Cause**
+A DMG is rendered inside the user's Finder, not inside the design file. Finder toolbar visibility, sidebar behavior, title-bar chrome, labels, aliases, and appearance can vary by system state. Treating mock chrome as literal product background can create a decorative layer that neither behaves like Finder nor stays visually aligned with it. The same pass also showed that `/Applications` should not be judged from the raw symlink/alias default icon alone: if the design calls for a clear blue folder target, the packaging script needs to create a real Finder alias and apply the custom icon deliberately.
+
+**Practical guidance**
+For DMG installer updates, validate the mounted volume window itself before signing off:
+- Decide explicitly which mock elements are product content and which only simulate Finder chrome.
+- Prefer hiding Finder's toolbar and sidebar for a controlled installer surface unless there is a functional reason to expose them.
+- Do not paint fake Finder controls or toolbar strips into the background just to match a static mock.
+- Match the background bitmap to the actual no-toolbar Finder content height, otherwise bottom gaps can appear even when the SVG looks correct.
+- Use Finder-accurate label sizing and bottom-anchored icon positions, then confirm them in a saved screenshot.
+- If the Applications target needs custom presentation, create a Finder alias and apply the icon resource in the packaging script rather than relying on a plain symlink's default appearance.
+
+Record the final mounted screenshot and the exact asset sizes in a validation artifact. Static design comparison is useful for direction, but the mounted Finder window is the sign-off surface.
 
 ## Remove Dead Presentation Data When The UI No Longer Needs It
 

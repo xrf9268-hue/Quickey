@@ -12,18 +12,21 @@ DMG_PATH="$BUILD_DIR/${APP_NAME}-${VERSION}.dmg"
 RW_DMG_PATH="$BUILD_DIR/${APP_NAME}-${VERSION}-layout.tmp.dmg"
 BACKGROUND_SOURCE="$PROJECT_DIR/assets/dmg/wink-dmg-background.png"
 BACKGROUND_NAME="background.png"
+APPLICATIONS_ICON_SOURCE="$PROJECT_DIR/assets/dmg/applications-folder.png"
+APPLICATIONS_ICON_NAME="applications-folder.png"
+APPLICATIONS_ICON_RESOURCE="applications-folder.rsrc"
 VOLUME_NAME="$APP_NAME"
 DMG_SIGN_IDENTITY="${DMG_SIGN_IDENTITY:-}"
 WINDOW_POS_X=160
 WINDOW_POS_Y=120
-WINDOW_WIDTH=640
-WINDOW_HEIGHT=440
-ICON_SIZE=104
-TEXT_SIZE=13
-APP_ICON_X=172
-APP_ICON_Y=214
-APPLICATIONS_X=468
-APPLICATIONS_Y=214
+WINDOW_WIDTH=680
+WINDOW_HEIGHT=460
+ICON_SIZE=96
+TEXT_SIZE=11
+APP_ICON_X=122
+APP_ICON_Y=300
+APPLICATIONS_X=558
+APPLICATIONS_Y=300
 APPLE_SCRIPT_DELAY="${DMG_APPLESCRIPT_DELAY:-2}"
 
 APPLESCRIPT_FILE=""
@@ -79,6 +82,11 @@ if [ ! -f "$BACKGROUND_SOURCE" ]; then
     exit 1
 fi
 
+if [ ! -f "$APPLICATIONS_ICON_SOURCE" ]; then
+    echo "Error: Applications folder icon asset not found at $APPLICATIONS_ICON_SOURCE" >&2
+    exit 1
+fi
+
 if mount | grep -Fq "on /Volumes/$VOLUME_NAME "; then
     echo "==> Detaching pre-existing /Volumes/$VOLUME_NAME mount..."
     detach_device "/Volumes/$VOLUME_NAME"
@@ -90,8 +98,17 @@ rm -f "$DMG_PATH" "$RW_DMG_PATH"
 
 echo "==> Staging DMG contents..."
 ditto "$APP_DIR" "$STAGING_DIR/${APP_NAME}.app"
-ln -s /Applications "$STAGING_DIR/Applications"
 cp "$BACKGROUND_SOURCE" "$STAGING_DIR/.background/$BACKGROUND_NAME"
+cp "$APPLICATIONS_ICON_SOURCE" "$STAGING_DIR/.background/$APPLICATIONS_ICON_NAME"
+osascript <<EOF
+tell application "Finder"
+    make new alias file to POSIX file "/Applications" at POSIX file "$STAGING_DIR" with properties {name:"Applications"}
+end tell
+EOF
+sips -i "$STAGING_DIR/.background/$APPLICATIONS_ICON_NAME" >/dev/null
+DeRez -only icns "$STAGING_DIR/.background/$APPLICATIONS_ICON_NAME" > "$STAGING_DIR/.background/$APPLICATIONS_ICON_RESOURCE"
+Rez -append "$STAGING_DIR/.background/$APPLICATIONS_ICON_RESOURCE" -o "$STAGING_DIR/Applications"
+SetFile -a C "$STAGING_DIR/Applications"
 chflags hidden "$STAGING_DIR/.background"
 
 STAGING_SIZE_MB=$(( ( $(du -sk "$STAGING_DIR" | awk '{print $1}') / 1024 ) + 96 ))
@@ -140,6 +157,9 @@ on run argv
             tell container window
                 set current view to icon view
                 set toolbar visible to false
+                try
+                    set sidebar width to 0
+                end try
                 set statusbar visible to false
                 try
                     set pathbar visible to false
@@ -164,6 +184,10 @@ on run argv
             delay 1
 
             tell container window
+                set toolbar visible to false
+                try
+                    set sidebar width to 0
+                end try
                 set statusbar visible to false
                 try
                     set pathbar visible to false
@@ -176,6 +200,10 @@ on run argv
 
         tell disk volumeName
             tell container window
+                set toolbar visible to false
+                try
+                    set sidebar width to 0
+                end try
                 set statusbar visible to false
                 try
                     set pathbar visible to false

@@ -6,11 +6,10 @@ import SwiftUI
 /// `Twin` is the anchor mark adopted across menu bar, dock and wordmark
 /// per the 2026-04-22 review decision.
 ///
-/// The closed eye is drawn as a concave-up arc — in SVG/SwiftUI y-down
-/// coordinates that means the control point's y is *larger* than the end
-/// points', so the middle of the arc dips below the ends. Paired with a
-/// solid dot to the right it reads unambiguously as "closed smiling eye
-/// + open eye" — v1's inverted arc looked like a frown.
+/// The closed eye is the circle-subtraction crescent from the latest
+/// logo options/UI v2 design: an outer disc at (12,16), r=9, cut by an
+/// inner disc at (15.2,13.4), r=8. Paired with the open-eye dot at
+/// (25,16), r=2.2, this matches the checked-in SVG app/menu assets.
 struct Logo_WinkTwin: View {
     var size: CGFloat = 64
     var color: Color = .primary
@@ -20,24 +19,30 @@ struct Logo_WinkTwin: View {
             // viewBox 32×32 to match the JSX source.
             let scale = canvasSize.width / 32
 
-            // Closed eye: concave-up quadratic curve.
-            var closedEye = Path()
-            closedEye.move(to: CGPoint(x: 5.5 * scale, y: 13.5 * scale))
-            closedEye.addQuadCurve(
-                to: CGPoint(x: 15.5 * scale, y: 13.5 * scale),
-                control: CGPoint(x: 10.5 * scale, y: 18.5 * scale)
-            )
-            context.stroke(
-                closedEye,
+            var crescent = Path()
+            crescent.addEllipse(in: CGRect(
+                x: (12 - 9) * scale,
+                y: (16 - 9) * scale,
+                width: 18 * scale,
+                height: 18 * scale
+            ))
+            crescent.addEllipse(in: CGRect(
+                x: (15.2 - 8) * scale,
+                y: (13.4 - 8) * scale,
+                width: 16 * scale,
+                height: 16 * scale
+            ))
+            context.fill(
+                crescent,
                 with: .color(color),
-                style: StrokeStyle(lineWidth: 2.8 * scale, lineCap: .round)
+                style: FillStyle(eoFill: true)
             )
 
-            // Open eye: solid dot, vertically centered on the arc baseline.
-            let dotRadius = 2.9 * scale
+            // Open eye: solid dot aligned to the crescent's optical center.
+            let dotRadius = 2.2 * scale
             let dot = Path(ellipseIn: CGRect(
-                x: 23 * scale - dotRadius,
-                y: 15.5 * scale - dotRadius,
+                x: 25 * scale - dotRadius,
+                y: 16 * scale - dotRadius,
                 width: dotRadius * 2,
                 height: dotRadius * 2
             ))
@@ -68,9 +73,9 @@ struct WinkAppIcon: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        .winkSRGB(0x5B, 0x8D, 0xEF),  // #5B8DEF
-                        .winkSRGB(0x8A, 0x6C, 0xF0),  // #8A6CF0
-                        .winkSRGB(0xB8, 0x6C, 0xD9)   // #B86CD9
+                        .winkSRGB(0x8A, 0x5B, 0xE3),  // #8A5BE3
+                        .winkSRGB(0x5E, 0x3F, 0xC7),  // #5E3FC7
+                        .winkSRGB(0x4A, 0x7B, 0xE8)   // #4A7BE8
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
