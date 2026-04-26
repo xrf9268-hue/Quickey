@@ -47,7 +47,7 @@ function WinkAppIcon({ size = 28, radius, theme = 'light' }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: r,
-      background: `linear-gradient(135deg, #5B8DEF 0%, #8A6CF0 60%, #B86CD9 100%)`,
+      background: `linear-gradient(135deg, #8A5BE3 0%, #5E3FC7 55%, #4A7BE8 100%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       color: '#fff',
       flexShrink: 0,

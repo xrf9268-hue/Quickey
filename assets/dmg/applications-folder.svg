@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 116 116" width="116" height="116">
+  <defs>
+    <linearGradient id="fBack2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7FB7FF" />
+      <stop offset="100%" stop-color="#3D8BE8" />
+    </linearGradient>
+    <linearGradient id="fFront2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BFD7F8" stop-opacity="0.92" />
+      <stop offset="100%" stop-color="#88B2EE" stop-opacity="0.85" />
+    </linearGradient>
+    <linearGradient id="fTab2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9EC8FF" />
+      <stop offset="100%" stop-color="#6CA3EC" />
+    </linearGradient>
+    <filter id="folderShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#1E50A0" flood-opacity="0.28" />
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.18" />
+    </filter>
+  </defs>
+  <g filter="url(#folderShadow)">
+    <path
+      d="M18 26 Q18 22 22 22 L48 22 Q52 22 54 25 L57 30 L100 30 Q104 30 104 34 L104 44 L18 44 Z"
+      fill="url(#fTab2)"
+    />
+    <path
+      d="M14 34 Q14 30 18 30 L98 30 Q104 30 104 36 L104 90 Q104 96 98 96 L18 96 Q14 96 14 92 Z"
+      fill="url(#fBack2)"
+    />
+    <path
+      d="M14 46 Q14 42 18 42 L100 42 Q106 42 106 48 L106 90 Q106 96 100 96 L18 96 Q14 96 14 92 Z"
+      fill="url(#fFront2)"
+    />
+    <path
+      d="M14 46 Q14 42 18 42 L100 42 Q106 42 106 48 L106 52 L14 52 Z"
+      fill="#FFFFFF"
+      opacity="0.28"
+    />
+    <path
+      d="M14 90 L106 90 L106 96 Q106 96 100 96 L18 96 Q14 96 14 92 Z"
+      fill="#285AB4"
+      opacity="0.10"
+    />
+  </g>
+</svg>
