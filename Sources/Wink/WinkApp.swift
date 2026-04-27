@@ -78,11 +78,11 @@ enum SettingsTitlebarLayout {
     /// CSS `font-weight: 500` ≈ AppKit/SwiftUI `.medium`.
     static let titleFontWeight: NSFont.Weight = .medium
 
-    /// Chrome browser reference titlebar puts the sidebar toggle ~24pt right
-    /// of the zoom button's right edge, sharing the traffic-light baseline.
-    /// We treat that as the "natural" gap between the lights cluster and the
-    /// next titlebar control.
-    static let toggleGapFromTrafficLights: CGFloat = 8
+    /// Chrome browser reference titlebar puts the sidebar toggle about 24pt to
+    /// the trailing side of the zoom button, sharing the traffic-light baseline.
+    /// AppKit owns the traffic-light positions; Wink only places its own toggle
+    /// relative to the current system button frames.
+    static let toggleGapFromZoomButton: CGFloat = 24
 
     /// SF Symbol `sidebar.leading` rendered at this point size matches the
     /// visual weight of the Chrome/Codex toggle icon at this scale.
@@ -105,41 +105,9 @@ enum SettingsTitlebarLayout {
     static let titleIdentifier = NSUserInterfaceItemIdentifier("WinkSettingsTitlebarTitle")
     static let accessoryIdentifier = NSUserInterfaceItemIdentifier("WinkSettingsTitlebarAccessory")
 
-    /// Right edge of the traffic-light container (= where the toggle starts
-    /// counting its leading gap from). 16 + 12 + 8 + 12 + 8 + 12 + 16 = 84.
-    static var trafficLightContainerWidth: CGFloat {
-        2 * trafficLightContainerHorizontalPadding
-            + 3 * trafficLightDotSize
-            + 2 * trafficLightDotGap
-    }
-
-    /// Window-coords top of each dot (CSS `align-items: center` in 36pt row
-    /// with 12pt dot ⇒ top inset = (36 − 12) / 2 = 12).
-    static var trafficLightDotTopY: CGFloat {
-        (height - trafficLightDotSize) / 2
-    }
-
     /// Vertical center y shared by traffic lights, toggle and title.
     static var baselineCenterY: CGFloat {
         height / 2
-    }
-
-    /// Window-coords leading x for each of the three dots, in order.
-    static var trafficLightDotLeadingXs: [CGFloat] {
-        let firstX = trafficLightContainerHorizontalPadding
-        return (0..<3).map { i in
-            firstX + CGFloat(i) * (trafficLightDotSize + trafficLightDotGap)
-        }
-    }
-
-    /// Window-coords leading x for the sidebar toggle hit area.
-    static var toggleLeadingX: CGFloat {
-        trafficLightContainerWidth + toggleGapFromTrafficLights
-    }
-
-    /// Window-coords top y for the sidebar-toggle hit target.
-    static var toggleTopY: CGFloat {
-        baselineCenterY - toggleHitSize.height / 2
     }
 }
 
@@ -156,11 +124,9 @@ enum SettingsTitlebarLayout {
 ///   3. Add an 8pt bottom `NSTitlebarAccessoryViewController` so the Settings
 ///      content starts below the design's 36pt chrome row instead of below the
 ///      native 28pt titlebar safe area.
-///   4. Reposition the three native `standardWindowButton`s so their colored
-///      dots land at the design coordinates from `chrome.jsx` /
-///      `primitives.jsx` (close dot top-left = (16, 12) etc). This is *not*
-///      a stylistic offset; it is the exact placement the design CSS
-///      `align-items: center` produces inside a 36pt row.
+///   4. Add Wink's own sidebar toggle beside the system traffic lights without
+///      rewriting the native button frames. AppKit remains the owner of the
+///      standard close/minimize/zoom placement during titlebar updates.
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
     func makeCoordinator() -> SettingsWindowChromeCoordinator {
         SettingsWindowChromeCoordinator()
@@ -264,7 +230,7 @@ final class SettingsWindowChromeCoordinator: NSObject {
         applyWindowChromeOptions(to: window)
         installTitlebarAccessory(in: window)
         window.layoutIfNeeded()
-        guard let titlebarView = positionTrafficLights(in: window) else { return }
+        guard let titlebarView = titlebarHostView(in: window) else { return }
         installOrUpdateTitlebarChrome(in: titlebarView)
     }
 
@@ -297,42 +263,8 @@ final class SettingsWindowChromeCoordinator: NSObject {
         window.addTitlebarAccessoryViewController(accessory)
     }
 
-    @discardableResult
-    private func positionTrafficLights(in window: NSWindow) -> NSView? {
-        let buttonTypes: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        let buttons = buttonTypes.compactMap { window.standardWindowButton($0) }
-        guard let titlebarView = buttons.first?.superview else { return nil }
-
-        // Release constraints anchoring the standard buttons. Without this,
-        // `setFrameOrigin` is overwritten on the next layout pass.
-        for button in buttons {
-            button.translatesAutoresizingMaskIntoConstraints = true
-        }
-        var node: NSView? = titlebarView
-        while let view = node {
-            let related = view.constraints.filter { constraint in
-                buttons.contains {
-                    ((constraint.firstItem as AnyObject?) === $0)
-                        || ((constraint.secondItem as AnyObject?) === $0)
-                }
-            }
-            NSLayoutConstraint.deactivate(related)
-            node = view.superview
-        }
-
-        let dotTopY = SettingsTitlebarLayout.trafficLightDotTopY      // 12
-        let dotSize = SettingsTitlebarLayout.trafficLightDotSize      // 12
-        let dotXs = SettingsTitlebarLayout.trafficLightDotLeadingXs   // [16, 36, 56]
-
-        for (button, dotX) in zip(buttons, dotXs) {
-            let buttonSize = button.frame.size
-            let buttonTopY = dotTopY - (buttonSize.height - dotSize) / 2
-            let buttonLeadingX = dotX - (buttonSize.width - dotSize) / 2
-            let yFromBottom = titlebarView.bounds.height - buttonTopY - buttonSize.height
-            button.setFrameOrigin(NSPoint(x: buttonLeadingX, y: yFromBottom))
-        }
-
-        return titlebarView
+    private func titlebarHostView(in window: NSWindow) -> NSView? {
+        window.standardWindowButton(.closeButton)?.superview
     }
 
     private func installOrUpdateTitlebarChrome(in titlebarView: NSView) {
@@ -392,12 +324,7 @@ final class SettingsWindowChromeCoordinator: NSObject {
         toggle.target = self
         toggle.action = #selector(toggleSidebar(_:))
         toggle.contentTintColor = SettingsTitlebarColors.textSecondary(for: titlebarView.effectiveAppearance)
-        toggle.frame = frameFromTopLeft(
-            x: SettingsTitlebarLayout.toggleLeadingX,
-            y: SettingsTitlebarLayout.toggleTopY,
-            size: SettingsTitlebarLayout.toggleHitSize,
-            in: titlebarView
-        )
+        toggle.frame = sidebarToggleFrame(in: titlebarView)
         hideUnownedSidebarToggleButtons(in: titlebarView, keeping: toggle)
 
         let title = titlebarView.subviews.first {
@@ -488,6 +415,33 @@ final class SettingsWindowChromeCoordinator: NSObject {
         )
     }
 
+    private func sidebarToggleFrame(in titlebarView: NSView) -> NSRect {
+        let size = SettingsTitlebarLayout.toggleHitSize
+        let isRightToLeft = window?.windowTitlebarLayoutDirection == .rightToLeft
+
+        let x: CGFloat
+        if isRightToLeft,
+           let closeButton = window?.standardWindowButton(.closeButton) {
+            x = closeButton.frame.minX - SettingsTitlebarLayout.toggleGapFromZoomButton - size.width
+        } else if let zoomButton = window?.standardWindowButton(.zoomButton) {
+            x = zoomButton.frame.maxX + SettingsTitlebarLayout.toggleGapFromZoomButton
+        } else {
+            x = SettingsTitlebarLayout.trafficLightContainerHorizontalPadding
+                + 3 * SettingsTitlebarLayout.trafficLightDotSize
+                + 2 * SettingsTitlebarLayout.trafficLightDotGap
+                + SettingsTitlebarLayout.toggleGapFromZoomButton
+        }
+
+        let centerY = window?.standardWindowButton(.zoomButton)?.frame.midY
+            ?? titlebarView.bounds.midY
+        return NSRect(
+            x: x,
+            y: centerY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
     private func descendantButtons(in view: NSView) -> [NSButton] {
         var result: [NSButton] = []
         for subview in view.subviews {
@@ -497,15 +451,6 @@ final class SettingsWindowChromeCoordinator: NSObject {
             result.append(contentsOf: descendantButtons(in: subview))
         }
         return result
-    }
-
-    private func frameFromTopLeft(x: CGFloat, y: CGFloat, size: NSSize, in container: NSView) -> NSRect {
-        NSRect(
-            x: x,
-            y: container.bounds.height - y - size.height,
-            width: size.width,
-            height: size.height
-        )
     }
 
     @objc private func toggleSidebar(_ sender: Any?) {

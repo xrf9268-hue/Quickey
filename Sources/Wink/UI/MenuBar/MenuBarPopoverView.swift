@@ -298,7 +298,7 @@ struct MenuBarPopoverView: View {
                                 }
                             }
                         }
-                        .frame(width: proxy.size.width, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(minHeight: proxy.size.height, alignment: .top)
                     }
                     .scrollIndicators(.automatic, axes: .vertical)
