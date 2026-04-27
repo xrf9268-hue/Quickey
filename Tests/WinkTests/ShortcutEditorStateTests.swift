@@ -215,6 +215,48 @@ func reorderingShortcutToVisibleDropOffsetPersistsOrder() throws {
     #expect(persisted.map(\.id) == [terminal.id, notes.id, safari.id, chrome.id])
 }
 
+@Test @MainActor
+func reorderingMiddleShortcutToMiddleVisibleDropOffsetPersistsOrder() throws {
+    let safari = AppShortcut(
+        appName: "Safari",
+        bundleIdentifier: "com.apple.Safari",
+        keyEquivalent: "s",
+        modifierFlags: ["command", "shift"]
+    )
+    let terminal = AppShortcut(
+        appName: "Terminal",
+        bundleIdentifier: "com.apple.Terminal",
+        keyEquivalent: "t",
+        modifierFlags: ["command", "shift"]
+    )
+    let notes = AppShortcut(
+        appName: "Notes",
+        bundleIdentifier: "com.apple.Notes",
+        keyEquivalent: "n",
+        modifierFlags: ["command", "shift"]
+    )
+    let chrome = AppShortcut(
+        appName: "Chrome",
+        bundleIdentifier: "com.google.Chrome",
+        keyEquivalent: "c",
+        modifierFlags: ["command", "shift"]
+    )
+    let context = makeEditorContext(existingShortcuts: [safari, terminal, notes, chrome])
+    defer { context.harness.cleanup() }
+
+    context.editor.reorderShortcut(
+        draggedID: notes.id,
+        toVisibleOffset: 1,
+        visibleShortcutIDs: [safari.id, terminal.id, notes.id, chrome.id]
+    )
+
+    #expect(context.editor.shortcuts.map(\.id) == [safari.id, notes.id, terminal.id, chrome.id])
+    #expect(context.callbackCount.value == 1)
+
+    let persisted = try context.harness.makePersistenceService().load()
+    #expect(persisted.map(\.id) == [safari.id, notes.id, terminal.id, chrome.id])
+}
+
 @Test
 func reorderPlannerMapsDownwardDragToVisibleInsertionOffset() {
     let ids = (0..<4).map { _ in UUID() }
@@ -243,6 +285,80 @@ func reorderPlannerMapsUpwardDragToVisibleInsertionOffset() {
     )
 
     #expect(offset == 1)
+}
+
+@Test
+func reorderPlannerMapsDropOffsetAcrossDividerGap() {
+    let ids = (0..<4).map { _ in UUID() }
+    let rowFrames = rowFrames(for: ids, dividerGap: 1)
+    let translationY = rowFrames[ids[0], default: .zero].maxY + 0.5 - rowFrames[ids[2], default: .zero].midY
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[2],
+        translationY: translationY,
+        visibleShortcutIDs: ids,
+        rowFrames: rowFrames
+    )
+
+    #expect(offset == 1)
+}
+
+@Test
+func reorderPlannerMapsDropOffsetAcrossVariableRowHeights() {
+    let ids = (0..<4).map { _ in UUID() }
+    let rowFrames = rowFrames(for: ids, rowHeights: [50, 68, 50, 50], dividerGap: 1)
+    let translationY = rowFrames[ids[1], default: .zero].maxY + 0.5 - rowFrames[ids[3], default: .zero].midY
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[3],
+        translationY: translationY,
+        visibleShortcutIDs: ids,
+        rowFrames: rowFrames
+    )
+
+    #expect(offset == 2)
+}
+
+@Test
+func reorderPlannerUsesDragStartSourceFrameWhenCurrentSourceFrameFollowsOffset() {
+    let ids = (0..<4).map { _ in UUID() }
+    let dragStartFrames = rowFrames(for: ids, dividerGap: 1)
+    let translationY = dragStartFrames[ids[0], default: .zero].maxY + 0.5
+        - dragStartFrames[ids[2], default: .zero].midY
+    var currentFrames = dragStartFrames
+    currentFrames[ids[2]] = dragStartFrames[ids[2], default: .zero].offsetBy(dx: 0, dy: translationY)
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[2],
+        translationY: translationY,
+        visibleShortcutIDs: ids,
+        rowFrames: currentFrames,
+        sourceFrame: dragStartFrames[ids[2]]
+    )
+
+    #expect(offset == 1)
+}
+
+@Test
+func reorderPlannerUsesVisibleIndexesWhenLazyStackOnlyReportsMountedRows() {
+    let ids = (0..<25).map { _ in UUID() }
+    let allFrames = rowFrames(for: ids, dividerGap: 1)
+    let mountedIDs = ids[17...24]
+    let mountedFrames = Dictionary(uniqueKeysWithValues: mountedIDs.map { id in
+        (id, allFrames[id, default: .zero])
+    })
+    let translationY = allFrames[ids[24], default: .zero].maxY + 0.5
+        - allFrames[ids[23], default: .zero].midY
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[23],
+        translationY: translationY,
+        visibleShortcutIDs: ids,
+        rowFrames: mountedFrames,
+        sourceFrame: allFrames[ids[23]]
+    )
+
+    #expect(offset == ids.count)
 }
 
 @Test @MainActor
@@ -281,18 +397,36 @@ func beginImportBuildsPreviewWithoutPersistingChanges() throws {
 }
 
 private func rowFrames(for ids: [UUID]) -> [UUID: CGRect] {
-    let rowHeight: CGFloat = 50
-    return Dictionary(uniqueKeysWithValues: ids.enumerated().map { index, id in
-        (
+    rowFrames(for: ids, rowHeights: Array(repeating: 50, count: ids.count))
+}
+
+private func rowFrames(
+    for ids: [UUID],
+    rowHeights: [CGFloat]? = nil,
+    dividerGap: CGFloat = 0
+) -> [UUID: CGRect] {
+    let heights = rowHeights ?? Array(repeating: 50, count: ids.count)
+    var y: CGFloat = 0
+    var frames: [(UUID, CGRect)] = []
+
+    for (index, id) in ids.enumerated() {
+        let rowHeight = heights[index]
+        frames.append((
             id,
             CGRect(
                 x: 0,
-                y: CGFloat(index) * rowHeight,
+                y: y,
                 width: 400,
                 height: rowHeight
             )
-        )
-    })
+        ))
+        y += rowHeight
+        if index < ids.count - 1 {
+            y += dividerGap
+        }
+    }
+
+    return Dictionary(uniqueKeysWithValues: frames)
 }
 
 @Test @MainActor

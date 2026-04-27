@@ -222,7 +222,11 @@ final class SettingsWindowChromeCoordinator: NSObject {
         if window.toolbar != nil {
             window.toolbar = nil
         }
-        window.isMovableByWindowBackground = true
+        // Keep the window non-movable from its content area so SwiftUI gestures
+        // inside the detail pane (e.g. the Your Shortcuts grip drag) can
+        // receive mouse-down events. The native 28pt titlebar plus the 8pt
+        // titlebar accessory keep the full 36pt chrome row draggable.
+        window.isMovableByWindowBackground = false
     }
 
     fileprivate func applyAll() {
