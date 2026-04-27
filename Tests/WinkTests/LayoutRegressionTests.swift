@@ -35,6 +35,51 @@ struct LayoutRegressionTests {
     }
 
     @Test @MainActor
+    func menuBarPopoverShortcutsRegionOwnsVerticalScroller() throws {
+        let context = MenuBarPopoverLayoutContext(shortcutCount: 18)
+        defer { context.harness.cleanup() }
+
+        let hostingView = makeHostingView(
+            MenuBarPopoverView(model: context.model).winkChromeRoot(),
+            size: NSSize(width: 356, height: 520)
+        )
+
+        let scrollViews = verticalScrollViews(in: hostingView)
+        let scroller = try #require(scrollViews.first)
+
+        #expect(scrollViews.count == 1)
+        #expect(scroller.frame.height < hostingView.bounds.height - 120)
+        #expect(scroller.frame.height > 80)
+        #expect((scroller.documentView?.frame.width ?? 0) <= scroller.contentView.bounds.width + 1)
+    }
+
+    @Test @MainActor
+    func insightsMostUsedRegionOwnsVerticalScroller() async throws {
+        let store = ShortcutStore()
+        let shortcuts = makeInsightShortcuts(count: 20)
+        store.replaceAll(with: shortcuts)
+
+        let viewModel = InsightsViewModel(
+            usageTracker: MultiShortcutUsageTracker(shortcuts: shortcuts),
+            shortcutStore: store
+        )
+        await viewModel.refresh(for: .week)
+
+        let hostingView = makeHostingView(
+            InsightsTabView(viewModel: viewModel),
+            size: NSSize(width: 700, height: 640)
+        )
+
+        let scrollViews = verticalScrollViews(in: hostingView)
+        let scroller = try #require(scrollViews.first)
+
+        #expect(scrollViews.count == 1)
+        #expect(scroller.frame.height < hostingView.bounds.height - 180)
+        #expect(scroller.frame.height > 120)
+        #expect((scroller.documentView?.frame.width ?? 0) <= scroller.contentView.bounds.width + 1)
+    }
+
+    @Test @MainActor
     func insightsCardUsesUpdatedSectionTitleCopy() {
         #expect(InsightsTabCopy.rankingSectionTitle == "Most used")
         #expect(InsightsTabCopy.rankingAccessoryText(totalCount: 112, period: .week) == "112 activations · 7 days")
@@ -381,8 +426,10 @@ struct LayoutRegressionTests {
         let scrollViewsWithVerticalScrollers = descendants(in: hostingView)
             .compactMap { $0 as? NSScrollView }
             .filter(\.hasVerticalScroller)
+        let scroller = scrollViewsWithVerticalScrollers.first
 
         #expect(scrollViewsWithVerticalScrollers.count == 1)
+        #expect((scroller?.documentView?.frame.width ?? 0) <= (scroller?.contentView.bounds.width ?? 0) + 1)
     }
 
     @Test @MainActor
@@ -439,7 +486,7 @@ struct LayoutRegressionTests {
     }
 
     @Test @MainActor
-    func insightsTabExposesSinglePageScroller() async {
+    func insightsMostUsedExposesSingleVerticalScroller() async {
         let shortcutId = UUID()
         let store = ShortcutStore()
         store.replaceAll(with: [
@@ -463,9 +510,7 @@ struct LayoutRegressionTests {
             size: NSSize(width: 700, height: 430)
         )
 
-        let scrollViewsWithVerticalScrollers = descendants(in: hostingView)
-            .compactMap { $0 as? NSScrollView }
-            .filter(\.hasVerticalScroller)
+        let scrollViewsWithVerticalScrollers = verticalScrollViews(in: hostingView)
 
         #expect(scrollViewsWithVerticalScrollers.count == 1)
     }
@@ -532,6 +577,7 @@ struct LayoutRegressionTests {
         let sidebarWidth = splitView.arrangedSubviews.first?.frame.width ?? 0
 
         #expect(abs(sidebarWidth - 150) < 1)
+        #expect(SettingsSidebarMetrics.topContentPadding == 8)
         #expect(splitView.frame.minY >= -1)
         #expect(splitView.frame.height <= hostingView.bounds.height + 1)
     }
@@ -552,6 +598,7 @@ struct LayoutRegressionTests {
         let topInset = window.frame.height - window.contentLayoutRect.maxY
         let accessory = try #require(window.titlebarAccessoryViewControllers.first)
         let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let zoomButton = try #require(window.standardWindowButton(.zoomButton))
         let titlebarView = try #require(closeButton.superview)
         let sidebarToggle = try #require(titlebarView.subviews.first {
             $0.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier
@@ -561,16 +608,112 @@ struct LayoutRegressionTests {
         })
         let toggleCenterYFromTop = titlebarView.bounds.height - sidebarToggle.frame.midY
         let titleCenterYFromTop = titlebarView.bounds.height - customTitle.frame.midY
+        let expectedToggleLeadingX = zoomButton.frame.maxX + SettingsTitlebarLayout.toggleGapFromZoomButton
 
         #expect(abs(topInset - SettingsTitlebarLayout.height) < 0.5)
         #expect(abs(titlebarView.bounds.height - SettingsTitlebarLayout.height) < 0.5)
         #expect(accessory.layoutAttribute == .bottom)
         #expect(accessory.automaticallyAdjustsSize == false)
         #expect(abs(accessory.view.frame.height - SettingsTitlebarLayout.titlebarAccessoryHeight) < 0.5)
-        #expect(abs(sidebarToggle.frame.minX - SettingsTitlebarLayout.toggleLeadingX) < 0.5)
-        #expect(abs(toggleCenterYFromTop - SettingsTitlebarLayout.baselineCenterY) < 0.5)
+        #expect(abs(sidebarToggle.frame.minX - expectedToggleLeadingX) < 0.5)
+        #expect(abs(sidebarToggle.frame.midY - zoomButton.frame.midY) < 0.5)
+        #expect(abs(toggleCenterYFromTop - (titlebarView.bounds.height - zoomButton.frame.midY)) < 0.5)
         #expect(abs(customTitle.frame.midX - titlebarView.bounds.midX) < 0.5)
         #expect(abs(titleCenterYFromTop - SettingsTitlebarLayout.baselineCenterY) < 0.5)
+    }
+
+    @Test @MainActor
+    func settingsWindowChromeReappliesToolbarAndSeparatorSuppression() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = SettingsWindowChromeCoordinator()
+
+        coordinator.attach(to: window)
+        window.toolbar = NSToolbar(identifier: "InjectedToolbar")
+        window.titlebarSeparatorStyle = .line
+
+        coordinator.attach(to: window)
+
+        #expect(window.toolbar == nil)
+        #expect(window.titlebarSeparatorStyle == .none)
+    }
+
+    @Test @MainActor
+    func settingsWindowChromeHidesDuplicateSidebarToggleButtons() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = SettingsWindowChromeCoordinator()
+
+        coordinator.attach(to: window)
+        let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let titlebarView = try #require(closeButton.superview)
+        let sidebarToggle = try #require(titlebarView.subviews.first {
+            $0.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier
+        })
+        let duplicateToggle = NSButton(frame: sidebarToggle.frame.offsetBy(dx: 2, dy: 0))
+        duplicateToggle.image = NSImage(systemSymbolName: "sidebar.leading", accessibilityDescription: "Toggle Sidebar")
+        duplicateToggle.imagePosition = .imageOnly
+        duplicateToggle.toolTip = "Toggle Sidebar"
+        titlebarView.addSubview(duplicateToggle)
+
+        coordinator.attach(to: window)
+
+        #expect(duplicateToggle.isHidden)
+        #expect(duplicateToggle.isEnabled == false)
+        let ownedToggles = titlebarView.subviews.filter {
+            $0.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier
+        }
+        #expect(ownedToggles.count == 1)
+    }
+
+    @Test @MainActor
+    func settingsWindowChromeDoesNotReapplyTrafficLightFrames() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = SettingsWindowChromeCoordinator()
+
+        coordinator.attach(to: window)
+        let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let minimizeButton = try #require(window.standardWindowButton(.miniaturizeButton))
+        let zoomButton = try #require(window.standardWindowButton(.zoomButton))
+        let appKitOwnedOrigins = [
+            closeButton: closeButton.frame.origin.offsetBy(dx: -8, dy: -4),
+            minimizeButton: minimizeButton.frame.origin.offsetBy(dx: -8, dy: -4),
+            zoomButton: zoomButton.frame.origin.offsetBy(dx: -8, dy: -4),
+        ]
+
+        for (button, origin) in appKitOwnedOrigins {
+            button.setFrameOrigin(origin)
+        }
+
+        coordinator.attach(to: window)
+
+        #expect(closeButton.frame.origin.isWithinHalfPoint(of: appKitOwnedOrigins[closeButton]))
+        #expect(minimizeButton.frame.origin.isWithinHalfPoint(of: appKitOwnedOrigins[minimizeButton]))
+        #expect(zoomButton.frame.origin.isWithinHalfPoint(of: appKitOwnedOrigins[zoomButton]))
+    }
+}
+
+private extension NSPoint {
+    func offsetBy(dx: CGFloat, dy: CGFloat) -> NSPoint {
+        NSPoint(x: x + dx, y: y + dy)
+    }
+
+    func isWithinHalfPoint(of other: NSPoint?) -> Bool {
+        guard let other else { return false }
+        return abs(x - other.x) < 0.5 && abs(y - other.y) < 0.5
     }
 }
 
@@ -618,6 +761,68 @@ private actor StaticUsageTracker: UsageTracking {
     }
 }
 
+private actor MultiShortcutUsageTracker: UsageTracking {
+    private let counts: [UUID: Int]
+    private let dailyCountsByShortcut: [String: [(date: String, count: Int)]]
+    private let hourlyBuckets: [HourlyUsageBucket]
+
+    init(shortcuts: [AppShortcut]) {
+        counts = Dictionary(
+            uniqueKeysWithValues: shortcuts.enumerated().map { index, shortcut in
+                (shortcut.id, shortcuts.count - index)
+            }
+        )
+        dailyCountsByShortcut = Dictionary(
+            uniqueKeysWithValues: shortcuts.enumerated().map { index, shortcut in
+                (
+                    shortcut.id.uuidString,
+                    [
+                        (date: "2026-04-20", count: 1),
+                        (date: "2026-04-21", count: shortcuts.count - index),
+                    ]
+                )
+            }
+        )
+        hourlyBuckets = (0..<7).flatMap { day in
+            (0..<24).map { hour in
+                HourlyUsageBucket(
+                    date: "2026-04-\(String(format: "%02d", 20 + day))",
+                    hour: hour,
+                    count: (day + hour) % 4
+                )
+            }
+        }
+    }
+
+    func usageCounts(days: Int, relativeTo now: Date) async -> [UUID: Int] {
+        counts
+    }
+
+    func dailyCounts(days: Int, relativeTo now: Date) async -> [String: [(date: String, count: Int)]] {
+        dailyCountsByShortcut
+    }
+
+    func totalSwitches(days: Int, relativeTo now: Date) async -> Int {
+        counts.values.reduce(0, +)
+    }
+
+    func hourlyCounts(days: Int, relativeTo now: Date) async -> [HourlyUsageBucket] {
+        hourlyBuckets
+    }
+
+    func previousPeriodTotal(days: Int, relativeTo now: Date) async -> Int {
+        0
+    }
+
+    func streakDays(relativeTo now: Date) async -> Int {
+        7
+    }
+
+    func usageTimeZone() async -> TimeZone {
+        .current
+    }
+}
+
 private struct CardWidthProbeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -633,6 +838,17 @@ private struct CardWidthProbeView: View {
     }
 }
 
+private func makeInsightShortcuts(count: Int) -> [AppShortcut] {
+    (0..<count).map { index in
+        AppShortcut(
+            appName: "Insight App \(index + 1)",
+            bundleIdentifier: "com.example.insight\(index + 1)",
+            keyEquivalent: String(UnicodeScalar(97 + (index % 26))!),
+            modifierFlags: ["command", "option"]
+        )
+    }
+}
+
 private func makeHeatmapBuckets() -> [HourlyUsageBucket] {
     (0..<7).flatMap { day in
         (0..<24).map { hour in
@@ -642,6 +858,65 @@ private func makeHeatmapBuckets() -> [HourlyUsageBucket] {
                 count: (day + hour) % 5
             )
         }
+    }
+}
+
+@MainActor
+private final class MenuBarPopoverLayoutContext {
+    let harness = TestPersistenceHarness()
+    let model: MenuBarPopoverModel
+
+    init(shortcutCount: Int) {
+        let shortcutStore = ShortcutStore()
+        let shortcuts = (0..<shortcutCount).map { index in
+            AppShortcut(
+                appName: "Menu App \(index + 1)",
+                bundleIdentifier: "com.example.menu\(index + 1)",
+                keyEquivalent: String(UnicodeScalar(97 + (index % 26))!),
+                modifierFlags: ["command", "option", "control", "shift"]
+            )
+        }
+        shortcutStore.replaceAll(with: shortcuts)
+
+        let manager = ShortcutManager(
+            shortcutStore: shortcutStore,
+            persistenceService: harness.makePersistenceService(),
+            appSwitcher: LayoutFakeAppSwitcher(),
+            captureCoordinator: ShortcutCaptureCoordinator(
+                standardProvider: LayoutFakeCaptureProvider(),
+                hyperProvider: LayoutFakeHyperCaptureProvider()
+            ),
+            permissionService: LayoutFakePermissionService(),
+            diagnosticClient: .live
+        )
+
+        let preferences = AppPreferences(
+            shortcutManager: manager,
+            launchAtLoginService: LaunchAtLoginService(client: .init(
+                status: { .notRegistered },
+                register: {},
+                unregister: {},
+                openSystemSettingsLoginItems: {}
+            ))
+        )
+        let statusProvider = ShortcutStatusProvider(
+            client: .init(
+                applicationURL: { _ in URL(fileURLWithPath: "/Applications/Fake.app") },
+                runningBundleIdentifiers: { [] }
+            ),
+            workspaceNotificationCenter: NotificationCenter(),
+            appNotificationCenter: NotificationCenter()
+        )
+        model = MenuBarPopoverModel(
+            shortcutStore: shortcutStore,
+            preferences: preferences,
+            shortcutStatusProvider: statusProvider,
+            usageTracker: StaticUsageTracker(shortcutId: shortcuts.first?.id ?? UUID()),
+            workspaceNotificationCenter: NotificationCenter(),
+            appNotificationCenter: NotificationCenter(),
+            openSettings: { _ in },
+            quit: {}
+        )
     }
 }
 
@@ -859,6 +1134,13 @@ private func makeHostingView<Content: View>(_ rootView: Content, size: NSSize) -
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     hostingView.layoutSubtreeIfNeeded()
     return hostingView
+}
+
+@MainActor
+private func verticalScrollViews(in view: NSView) -> [NSScrollView] {
+    descendants(in: view)
+        .compactMap { $0 as? NSScrollView }
+        .filter(\.hasVerticalScroller)
 }
 
 @MainActor

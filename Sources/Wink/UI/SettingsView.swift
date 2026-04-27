@@ -34,11 +34,19 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(SettingsTab.allCases, id: \.self, selection: $settingsLauncher.selectedTab) { tab in
-                Label(tab.title, systemImage: tab.systemImage)
-                    .font(WinkType.bodyMedium)
-                    .padding(.leading, SettingsSidebarMetrics.rowContentLeadingAdjustment)
-                    .tag(tab)
+            List(selection: $settingsLauncher.selectedTab) {
+                Color.clear
+                    .frame(height: SettingsSidebarMetrics.topContentPadding)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(palette.sidebarBg)
+                    .accessibilityHidden(true)
+
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    Label(tab.title, systemImage: tab.systemImage)
+                        .font(WinkType.bodyMedium)
+                        .padding(.leading, SettingsSidebarMetrics.rowContentLeadingAdjustment)
+                        .tag(tab)
+                }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -105,7 +113,8 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsSidebarMetrics {
+enum SettingsSidebarMetrics {
     static let width: CGFloat = 150
+    static let topContentPadding: CGFloat = 8
     static let rowContentLeadingAdjustment: CGFloat = -2
 }

@@ -174,6 +174,78 @@ func movingShortcutTowardEndAdjustsDestinationAfterRemoval() throws {
 }
 
 @Test @MainActor
+func reorderingShortcutToVisibleDropOffsetPersistsOrder() throws {
+    let safari = AppShortcut(
+        appName: "Safari",
+        bundleIdentifier: "com.apple.Safari",
+        keyEquivalent: "s",
+        modifierFlags: ["command", "shift"]
+    )
+    let terminal = AppShortcut(
+        appName: "Terminal",
+        bundleIdentifier: "com.apple.Terminal",
+        keyEquivalent: "t",
+        modifierFlags: ["command", "shift"]
+    )
+    let notes = AppShortcut(
+        appName: "Notes",
+        bundleIdentifier: "com.apple.Notes",
+        keyEquivalent: "n",
+        modifierFlags: ["command", "shift"]
+    )
+    let chrome = AppShortcut(
+        appName: "Chrome",
+        bundleIdentifier: "com.google.Chrome",
+        keyEquivalent: "c",
+        modifierFlags: ["command", "shift"]
+    )
+    let context = makeEditorContext(existingShortcuts: [safari, terminal, notes, chrome])
+    defer { context.harness.cleanup() }
+
+    context.editor.reorderShortcut(
+        draggedID: safari.id,
+        toVisibleOffset: 3,
+        visibleShortcutIDs: [safari.id, terminal.id, notes.id, chrome.id]
+    )
+
+    #expect(context.editor.shortcuts.map(\.id) == [terminal.id, notes.id, safari.id, chrome.id])
+    #expect(context.callbackCount.value == 1)
+
+    let persisted = try context.harness.makePersistenceService().load()
+    #expect(persisted.map(\.id) == [terminal.id, notes.id, safari.id, chrome.id])
+}
+
+@Test
+func reorderPlannerMapsDownwardDragToVisibleInsertionOffset() {
+    let ids = (0..<4).map { _ in UUID() }
+    let rowFrames = rowFrames(for: ids)
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[0],
+        translationY: 110,
+        visibleShortcutIDs: ids,
+        rowFrames: rowFrames
+    )
+
+    #expect(offset == 3)
+}
+
+@Test
+func reorderPlannerMapsUpwardDragToVisibleInsertionOffset() {
+    let ids = (0..<4).map { _ in UUID() }
+    let rowFrames = rowFrames(for: ids)
+
+    let offset = ShortcutReorderPlanner.visibleDropOffset(
+        for: ids[3],
+        translationY: -110,
+        visibleShortcutIDs: ids,
+        rowFrames: rowFrames
+    )
+
+    #expect(offset == 1)
+}
+
+@Test @MainActor
 func beginImportBuildsPreviewWithoutPersistingChanges() throws {
     let context = makeEditorContext()
     defer { context.harness.cleanup() }
@@ -206,6 +278,21 @@ func beginImportBuildsPreviewWithoutPersistingChanges() throws {
     #expect(context.editor.pendingRecipeImport?.entries.count == 1)
     #expect(persisted.isEmpty)
     #expect(context.callbackCount.value == 0)
+}
+
+private func rowFrames(for ids: [UUID]) -> [UUID: CGRect] {
+    let rowHeight: CGFloat = 50
+    return Dictionary(uniqueKeysWithValues: ids.enumerated().map { index, id in
+        (
+            id,
+            CGRect(
+                x: 0,
+                y: CGFloat(index) * rowHeight,
+                width: 400,
+                height: rowHeight
+            )
+        )
+    })
 }
 
 @Test @MainActor

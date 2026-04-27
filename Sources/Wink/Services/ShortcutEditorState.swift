@@ -163,18 +163,35 @@ final class ShortcutEditorState {
         onShortcutConfigurationChange()
     }
 
-    /// Moves the shortcut identified by `id` so that it occupies the slot currently
-    /// held by `target`. Used by drag-to-reorder in the Shortcuts tab, where drops
-    /// are resolved against the row under the cursor rather than an index between rows.
-    func reorderShortcut(draggedID id: UUID, onto target: UUID) {
-        guard id != target,
-              let fromIndex = shortcuts.firstIndex(where: { $0.id == id }),
-              let toIndex = shortcuts.firstIndex(where: { $0.id == target }),
-              fromIndex != toIndex else {
+    /// Moves the shortcut identified by `id` to an insertion offset in the
+    /// currently visible shortcut list.
+    func reorderShortcut(draggedID id: UUID, toVisibleOffset offset: Int, visibleShortcutIDs: [UUID]) {
+        guard let fromIndex = shortcuts.firstIndex(where: { $0.id == id }),
+              visibleShortcutIDs.contains(id) else {
             return
         }
 
-        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        let clampedOffset = min(max(offset, 0), visibleShortcutIDs.count)
+        let destination: Int
+        if clampedOffset == visibleShortcutIDs.count {
+            guard let lastVisibleID = visibleShortcutIDs.last,
+                  let lastVisibleIndex = shortcuts.firstIndex(where: { $0.id == lastVisibleID }) else {
+                return
+            }
+            destination = lastVisibleIndex + 1
+        } else {
+            let destinationID = visibleShortcutIDs[clampedOffset]
+            guard destinationID != id,
+                  let destinationIndex = shortcuts.firstIndex(where: { $0.id == destinationID }) else {
+                return
+            }
+            destination = destinationIndex
+        }
+
+        guard destination != fromIndex && destination != fromIndex + 1 else {
+            return
+        }
+
         moveShortcut(from: IndexSet([fromIndex]), to: destination)
     }
 

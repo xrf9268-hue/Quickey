@@ -22,6 +22,49 @@ private enum ShortcutRowMetrics {
     }
 }
 
+private enum ShortcutListCoordinateSpace {
+    static let name = "WinkShortcutListCoordinateSpace"
+}
+
+private struct ShortcutRowFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [UUID: CGRect] = [:]
+
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+struct ShortcutRowReorderHandlers {
+    let onChanged: (DragGesture.Value) -> Void
+    let onEnded: (DragGesture.Value) -> Void
+}
+
+enum ShortcutReorderPlanner {
+    static func visibleDropOffset(
+        for shortcutID: UUID,
+        translationY: CGFloat,
+        visibleShortcutIDs: [UUID],
+        rowFrames: [UUID: CGRect]
+    ) -> Int? {
+        guard let sourceFrame = rowFrames[shortcutID],
+              let sourceVisibleOffset = visibleShortcutIDs.firstIndex(of: shortcutID) else {
+            return nil
+        }
+
+        let projectedMidY = sourceFrame.midY + translationY
+        let rowsAbove = visibleShortcutIDs
+            .filter { $0 != shortcutID }
+            .compactMap { rowFrames[$0] }
+            .filter { projectedMidY > $0.midY }
+            .count
+
+        if rowsAbove >= sourceVisibleOffset {
+            return rowsAbove + 1
+        }
+        return rowsAbove
+    }
+}
+
 private enum ShortcutImportPreviewMetrics {
     static let detailsMaxHeight: CGFloat = 128
 }
@@ -178,6 +221,9 @@ struct ShortcutsTabView: View {
     @State private var showingAppPicker = false
     @State private var filterText = ""
     @State private var accessibilityOptions = ShortcutRowAccessibilityOptions.standard
+    @State private var shortcutRowFrames: [UUID: CGRect] = [:]
+    @State private var draggingShortcutID: UUID?
+    @State private var dragTranslationY: CGFloat = 0
 
     private var filteredShortcuts: [AppShortcut] {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -456,9 +502,14 @@ struct ShortcutsTabView: View {
                                 }
                             }
                         }
-                        .frame(width: proxy.size.width, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(minHeight: proxy.size.height, alignment: .top)
                     }
+                    .coordinateSpace(name: ShortcutListCoordinateSpace.name)
+                    .onPreferenceChange(ShortcutRowFramePreferenceKey.self) { frames in
+                        shortcutRowFrames = frames
+                    }
+                    .scrollIndicators(.automatic, axes: .vertical)
                 }
                 .frame(
                     minHeight: ShortcutRowMetrics.minimumListHeight,
@@ -471,29 +522,74 @@ struct ShortcutsTabView: View {
         .layoutPriority(1)
     }
 
-    // Drag-to-reorder lives on the row via `.draggable` + `.dropDestination`. We gate
-    // it on `canReorder` so filtering or an active import preview cannot produce a
+    // Drag-to-reorder is local to the visible shortcut list. We gate it on
+    // `canReorder` so filtering or an active import preview cannot produce a
     // silently-wrong reorder against the full shortcut list.
     @ViewBuilder
     private func reorderableRow(_ shortcut: AppShortcut, index: Int, canReorder: Bool) -> some View {
         if canReorder {
-            shortcutRow(shortcut, index: index)
-                .draggable(shortcut.id.uuidString)
-                .dropDestination(for: String.self) { items, _ in
-                    guard let idString = items.first,
-                          let draggedID = UUID(uuidString: idString) else {
-                        return false
+            shortcutRow(
+                shortcut,
+                index: index,
+                reorderHandlers: ShortcutRowReorderHandlers(
+                    onChanged: { value in
+                        draggingShortcutID = shortcut.id
+                        dragTranslationY = value.translation.height
+                    },
+                    onEnded: { value in
+                        completeReorderDrag(shortcutID: shortcut.id, translationY: value.translation.height)
                     }
-                    editor.reorderShortcut(draggedID: draggedID, onto: shortcut.id)
-                    return true
-                }
+                )
+            )
+                .background(rowFrameReader(for: shortcut.id))
+                .offset(y: draggingShortcutID == shortcut.id ? dragTranslationY : 0)
+                .zIndex(draggingShortcutID == shortcut.id ? 1 : 0)
         } else {
             shortcutRow(shortcut, index: index)
         }
     }
 
+    private func rowFrameReader(for shortcutID: UUID) -> some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: ShortcutRowFramePreferenceKey.self,
+                value: [shortcutID: proxy.frame(in: .named(ShortcutListCoordinateSpace.name))]
+            )
+        }
+    }
+
+    private func completeReorderDrag(shortcutID: UUID, translationY: CGFloat) {
+        defer {
+            draggingShortcutID = nil
+            dragTranslationY = 0
+        }
+
+        guard let offset = visibleDropOffset(for: shortcutID, translationY: translationY) else {
+            return
+        }
+
+        editor.reorderShortcut(
+            draggedID: shortcutID,
+            toVisibleOffset: offset,
+            visibleShortcutIDs: filteredShortcuts.map(\.id)
+        )
+    }
+
+    private func visibleDropOffset(for shortcutID: UUID, translationY: CGFloat) -> Int? {
+        ShortcutReorderPlanner.visibleDropOffset(
+            for: shortcutID,
+            translationY: translationY,
+            visibleShortcutIDs: filteredShortcuts.map(\.id),
+            rowFrames: shortcutRowFrames
+        )
+    }
+
     @ViewBuilder
-    private func shortcutRow(_ shortcut: AppShortcut, index: Int) -> some View {
+    private func shortcutRow(
+        _ shortcut: AppShortcut,
+        index: Int,
+        reorderHandlers: ShortcutRowReorderHandlers? = nil
+    ) -> some View {
         let importPreviewActive = editor.pendingRecipeImport != nil
         let runtimeStatus = shortcutStatusProvider.status(for: shortcut)
 
@@ -510,7 +606,8 @@ struct ShortcutsTabView: View {
             },
             onRemove: {
                 editor.removeShortcut(id: shortcut.id)
-            }
+            },
+            reorderHandlers: reorderHandlers
         )
     }
 
@@ -592,6 +689,7 @@ struct ShortcutsTabView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollIndicators(.automatic, axes: .vertical)
             .frame(maxHeight: ShortcutImportPreviewMetrics.detailsMaxHeight)
         }
     }
@@ -621,6 +719,7 @@ struct ShortcutsListRow: View {
     let index: Int
     let onToggleEnabled: @MainActor () -> Void
     let onRemove: @MainActor () -> Void
+    let reorderHandlers: ShortcutRowReorderHandlers?
 
     private var presentation: ShortcutsListRowPresentation {
         ShortcutsListRowPresentation(
@@ -649,9 +748,7 @@ struct ShortcutsListRow: View {
 
     var body: some View {
         HStack(spacing: ShortcutRowMetrics.spacing) {
-            WinkIcon.grip.image(size: 11, weight: .semibold)
-                .foregroundStyle(palette.textTertiary)
-                .frame(width: ShortcutRowMetrics.gripColumnWidth)
+            gripHandle
 
             ZStack(alignment: .bottomTrailing) {
                 AppIconView(
@@ -721,6 +818,25 @@ struct ShortcutsListRow: View {
         .alternatingRowBackground(index: index)
         .opacity(presentation.contentOpacity)
         .animation(statusAnimation, value: statusAnimationKey)
+    }
+
+    @ViewBuilder
+    private var gripHandle: some View {
+        let icon = WinkIcon.grip.image(size: 11, weight: .semibold)
+            .foregroundStyle(palette.textTertiary)
+            .frame(width: ShortcutRowMetrics.gripColumnWidth)
+            .contentShape(Rectangle())
+            .help("Drag to reorder")
+
+        if let reorderHandlers {
+            icon.gesture(
+                DragGesture(minimumDistance: 3)
+                    .onChanged(reorderHandlers.onChanged)
+                    .onEnded(reorderHandlers.onEnded)
+            )
+        } else {
+            icon
+        }
     }
 
     private var shortcutAccessoryGroup: some View {
