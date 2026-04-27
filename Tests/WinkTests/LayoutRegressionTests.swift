@@ -573,6 +573,7 @@ struct LayoutRegressionTests {
         let sidebarWidth = splitView.arrangedSubviews.first?.frame.width ?? 0
 
         #expect(abs(sidebarWidth - 150) < 1)
+        #expect(SettingsSidebarMetrics.topContentPadding == 8)
         #expect(splitView.frame.minY >= -1)
         #expect(splitView.frame.height <= hostingView.bounds.height + 1)
     }
@@ -612,6 +613,58 @@ struct LayoutRegressionTests {
         #expect(abs(toggleCenterYFromTop - SettingsTitlebarLayout.baselineCenterY) < 0.5)
         #expect(abs(customTitle.frame.midX - titlebarView.bounds.midX) < 0.5)
         #expect(abs(titleCenterYFromTop - SettingsTitlebarLayout.baselineCenterY) < 0.5)
+    }
+
+    @Test @MainActor
+    func settingsWindowChromeReappliesToolbarAndSeparatorSuppression() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = SettingsWindowChromeCoordinator()
+
+        coordinator.attach(to: window)
+        window.toolbar = NSToolbar(identifier: "InjectedToolbar")
+        window.titlebarSeparatorStyle = .line
+
+        coordinator.attach(to: window)
+
+        #expect(window.toolbar == nil)
+        #expect(window.titlebarSeparatorStyle == .none)
+    }
+
+    @Test @MainActor
+    func settingsWindowChromeHidesDuplicateSidebarToggleButtons() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: SettingsWindowMetrics.width, height: SettingsWindowMetrics.height),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let coordinator = SettingsWindowChromeCoordinator()
+
+        coordinator.attach(to: window)
+        let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let titlebarView = try #require(closeButton.superview)
+        let sidebarToggle = try #require(titlebarView.subviews.first {
+            $0.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier
+        })
+        let duplicateToggle = NSButton(frame: sidebarToggle.frame.offsetBy(dx: 2, dy: 0))
+        duplicateToggle.image = NSImage(systemSymbolName: "sidebar.leading", accessibilityDescription: "Toggle Sidebar")
+        duplicateToggle.imagePosition = .imageOnly
+        duplicateToggle.toolTip = "Toggle Sidebar"
+        titlebarView.addSubview(duplicateToggle)
+
+        coordinator.attach(to: window)
+
+        #expect(duplicateToggle.isHidden)
+        #expect(duplicateToggle.isEnabled == false)
+        let ownedToggles = titlebarView.subviews.filter {
+            $0.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier
+        }
+        #expect(ownedToggles.count == 1)
     }
 }
 

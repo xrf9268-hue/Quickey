@@ -88,6 +88,8 @@ enum SettingsTitlebarLayout {
     /// visual weight of the Chrome/Codex toggle icon at this scale.
     static let toggleIconPointSize: CGFloat = 14
     static let toggleHitSize = NSSize(width: 24, height: 24)
+    static let sidebarToggleSymbolName = "rectangle.leadinghalf.inset.filled"
+    static let sidebarToggleFallbackSymbolName = "sidebar.leading"
 
     /// chrome.jsx `borderBottom: 0.5px solid chromeBorder`.
     static let hairlineThickness: CGFloat = 0.5
@@ -209,6 +211,7 @@ private final class NotificationObserverBag {
 @MainActor
 final class SettingsWindowChromeCoordinator: NSObject {
     private weak var window: NSWindow?
+    private weak var chromeHostView: NSView?
     private let observers = NotificationObserverBag()
 
     func attach(to window: NSWindow) {
@@ -239,19 +242,26 @@ final class SettingsWindowChromeCoordinator: NSObject {
 
     private func applyOnce() {
         guard let window else { return }
+        applyWindowChromeOptions(to: window)
+        applyAll()
+    }
+
+    private func applyWindowChromeOptions(to window: NSWindow) {
         window.title = "Wink"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarSeparatorStyle = .none
         window.toolbarStyle = .unifiedCompact
-        window.toolbar = nil
+        if window.toolbar != nil {
+            window.toolbar = nil
+        }
         window.isMovableByWindowBackground = true
-        applyAll()
     }
 
     fileprivate func applyAll() {
         guard let window else { return }
+        applyWindowChromeOptions(to: window)
         installTitlebarAccessory(in: window)
         window.layoutIfNeeded()
         guard let titlebarView = positionTrafficLights(in: window) else { return }
@@ -326,6 +336,13 @@ final class SettingsWindowChromeCoordinator: NSObject {
     }
 
     private func installOrUpdateTitlebarChrome(in titlebarView: NSView) {
+        if chromeHostView !== titlebarView {
+            if let chromeHostView {
+                removeInstalledChrome(from: chromeHostView)
+            }
+            chromeHostView = titlebarView
+        }
+
         let background = titlebarView.subviews.first {
             $0.identifier == SettingsTitlebarLayout.backgroundIdentifier
         } as? SettingsTitlebarPassthroughView ?? {
@@ -360,7 +377,7 @@ final class SettingsWindowChromeCoordinator: NSObject {
         } as? NSButton ?? {
             let button = NSButton(frame: .zero)
             button.identifier = SettingsTitlebarLayout.sidebarToggleIdentifier
-            button.image = NSImage(systemSymbolName: "sidebar.leading", accessibilityDescription: "Toggle Sidebar")
+            button.image = Self.sidebarToggleImage()
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
             button.isBordered = false
@@ -381,6 +398,7 @@ final class SettingsWindowChromeCoordinator: NSObject {
             size: SettingsTitlebarLayout.toggleHitSize,
             in: titlebarView
         )
+        hideUnownedSidebarToggleButtons(in: titlebarView, keeping: toggle)
 
         let title = titlebarView.subviews.first {
             $0.identifier == SettingsTitlebarLayout.titleIdentifier
@@ -412,6 +430,73 @@ final class SettingsWindowChromeCoordinator: NSObject {
             width: titleSize.width,
             height: titleSize.height
         ).integral
+    }
+
+    private func removeInstalledChrome(from hostView: NSView) {
+        let identifiers = [
+            SettingsTitlebarLayout.backgroundIdentifier,
+            SettingsTitlebarLayout.hairlineIdentifier,
+            SettingsTitlebarLayout.sidebarToggleIdentifier,
+            SettingsTitlebarLayout.titleIdentifier,
+        ]
+        for subview in hostView.subviews where subview.identifier.map(identifiers.contains) == true {
+            subview.removeFromSuperview()
+        }
+    }
+
+    private func hideUnownedSidebarToggleButtons(in titlebarView: NSView, keeping customToggle: NSButton) {
+        let customFrame = customToggle.frame.insetBy(dx: -10, dy: -8)
+        for button in descendantButtons(in: titlebarView) where button !== customToggle {
+            guard isSidebarToggleCandidate(button, in: titlebarView, near: customFrame) else {
+                continue
+            }
+            button.isHidden = true
+            button.isEnabled = false
+        }
+    }
+
+    private func isSidebarToggleCandidate(_ button: NSButton, in titlebarView: NSView, near customFrame: NSRect) -> Bool {
+        if button.identifier == SettingsTitlebarLayout.sidebarToggleIdentifier {
+            return false
+        }
+
+        let searchableText = [
+            button.identifier?.rawValue,
+            button.toolTip,
+            button.accessibilityLabel(),
+            button.accessibilityTitle(),
+            button.cell?.accessibilityLabel(),
+            button.cell?.accessibilityTitle(),
+        ]
+        if searchableText.contains(where: { $0?.localizedCaseInsensitiveContains("sidebar") == true }) {
+            return true
+        }
+
+        let frameInTitlebar = button.superview?.convert(button.frame, to: titlebarView) ?? button.frame
+        return button.frame.width <= SettingsTitlebarLayout.toggleHitSize.width + 12
+            && button.frame.height <= SettingsTitlebarLayout.toggleHitSize.height + 12
+            && frameInTitlebar.intersects(customFrame)
+    }
+
+    private static func sidebarToggleImage() -> NSImage? {
+        NSImage(
+            systemSymbolName: SettingsTitlebarLayout.sidebarToggleSymbolName,
+            accessibilityDescription: "Toggle Sidebar"
+        ) ?? NSImage(
+            systemSymbolName: SettingsTitlebarLayout.sidebarToggleFallbackSymbolName,
+            accessibilityDescription: "Toggle Sidebar"
+        )
+    }
+
+    private func descendantButtons(in view: NSView) -> [NSButton] {
+        var result: [NSButton] = []
+        for subview in view.subviews {
+            if let button = subview as? NSButton {
+                result.append(button)
+            }
+            result.append(contentsOf: descendantButtons(in: subview))
+        }
+        return result
     }
 
     private func frameFromTopLeft(x: CGFloat, y: CGFloat, size: NSSize, in container: NSView) -> NSRect {
