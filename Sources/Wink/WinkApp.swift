@@ -187,18 +187,34 @@ extension Notification.Name {
     static let settingsSidebarToggleRequested = Notification.Name("WinkSettingsSidebarToggleRequested")
 }
 
+private final class NotificationObserverBag {
+    private var tokens: [NSObjectProtocol] = []
+
+    func removeAll() {
+        for token in tokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        tokens.removeAll()
+    }
+
+    func append(_ token: NSObjectProtocol) {
+        tokens.append(token)
+    }
+
+    deinit {
+        removeAll()
+    }
+}
+
 @MainActor
 final class SettingsWindowChromeCoordinator: NSObject {
     private weak var window: NSWindow?
-    private var observers: [NSObjectProtocol] = []
+    private let observers = NotificationObserverBag()
 
     func attach(to window: NSWindow) {
         guard self.window !== window else {
             applyAll()
             return
-        }
-        for observer in observers {
-            NotificationCenter.default.removeObserver(observer)
         }
         observers.removeAll()
 
