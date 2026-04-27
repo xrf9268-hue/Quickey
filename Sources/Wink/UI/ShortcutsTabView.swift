@@ -4,7 +4,8 @@ import SwiftUI
 
 private enum ShortcutRowMetrics {
     static let spacing: CGFloat = 12
-    static let gripColumnWidth: CGFloat = 12
+    static let gripColumnWidth: CGFloat = 24
+    static let gripHitHeight: CGFloat = 24
     static let iconSize: CGFloat = 30
     static let textSpacing: CGFloat = 2
     static let verticalPadding: CGFloat = 10
@@ -510,6 +511,7 @@ struct ShortcutsTabView: View {
                         shortcutRowFrames = frames
                     }
                     .scrollIndicators(.automatic, axes: .vertical)
+                    .scrollDisabled(draggingShortcutID != nil)
                 }
                 .frame(
                     minHeight: ShortcutRowMetrics.minimumListHeight,
@@ -564,6 +566,12 @@ struct ShortcutsTabView: View {
             dragTranslationY = 0
         }
 
+        // Treat sub-pixel translations as a stationary click on the grip — avoid
+        // reordering when the user merely tapped the handle without dragging.
+        guard abs(translationY) >= ShortcutsTabView.minimumReorderTranslation else {
+            return
+        }
+
         guard let offset = visibleDropOffset(for: shortcutID, translationY: translationY) else {
             return
         }
@@ -574,6 +582,8 @@ struct ShortcutsTabView: View {
             visibleShortcutIDs: filteredShortcuts.map(\.id)
         )
     }
+
+    fileprivate static let minimumReorderTranslation: CGFloat = 4
 
     private func visibleDropOffset(for shortcutID: UUID, translationY: CGFloat) -> Int? {
         ShortcutReorderPlanner.visibleDropOffset(
@@ -822,17 +832,30 @@ struct ShortcutsListRow: View {
 
     @ViewBuilder
     private var gripHandle: some View {
-        let icon = WinkIcon.grip.image(size: 11, weight: .semibold)
+        let icon = WinkIcon.grip.image(size: 12, weight: .semibold)
             .foregroundStyle(palette.textTertiary)
-            .frame(width: ShortcutRowMetrics.gripColumnWidth)
+            .frame(
+                width: ShortcutRowMetrics.gripColumnWidth,
+                height: ShortcutRowMetrics.gripHitHeight
+            )
             .contentShape(Rectangle())
             .help("Drag to reorder")
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.openHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
 
         if let reorderHandlers {
-            icon.gesture(
-                DragGesture(minimumDistance: 3)
-                    .onChanged(reorderHandlers.onChanged)
-                    .onEnded(reorderHandlers.onEnded)
+            icon.simultaneousGesture(
+                DragGesture(
+                    minimumDistance: 2,
+                    coordinateSpace: .named(ShortcutListCoordinateSpace.name)
+                )
+                .onChanged(reorderHandlers.onChanged)
+                .onEnded(reorderHandlers.onEnded)
             )
         } else {
             icon
