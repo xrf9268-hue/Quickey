@@ -433,6 +433,31 @@ struct LayoutRegressionTests {
     }
 
     @Test @MainActor
+    func shortcutsReorderGripUsesAppKitCursorRectHost() {
+        let context = ShortcutsTabLayoutContext(shortcutCount: 4)
+        defer { context.harness.cleanup() }
+
+        let hostingView = makeHostingView(
+            ShortcutsTabView(
+                editor: context.editor,
+                preferences: context.preferences,
+                appListProvider: context.appListProvider,
+                shortcutStatusProvider: context.shortcutStatusProvider
+            ),
+            size: NSSize(width: 700, height: 430)
+        )
+
+        let cursorHosts = descendants(in: hostingView).filter {
+            String(describing: type(of: $0)).contains("ShortcutGripCursorView")
+        }
+
+        #expect(!cursorHosts.isEmpty)
+        #expect(cursorHosts.contains { host in
+            abs(host.frame.width - 24) < 1 && abs(host.frame.height - 24) < 1
+        })
+    }
+
+    @Test @MainActor
     func shortcutsListUsesAvailableHeightInsteadOfFixedCap() throws {
         let context = ShortcutsTabLayoutContext(shortcutCount: 4)
         defer { context.harness.cleanup() }
